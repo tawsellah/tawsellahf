@@ -4,7 +4,7 @@ const defaultSeats: Seat[] = [
   { id: 'D1', name: 'السائق', status: 'driver', row: 'front', position: 0 },
   { id: 'F1', name: 'مقعد أمامي بجانب السائق', status: 'available', row: 'front', position: 1 },
   { id: 'R1', name: 'مقعد خلفي يسار', status: 'available', row: 'rear', position: 0 },
-  { id: 'R2', name: 'مقعد خلفي وسط', status: 'taken', row: 'rear', position: 1 },
+  { id: 'R2', name: 'مقعد خلفي وسط', status: 'available', row: 'rear', position: 1 }, // Changed from 'taken' to 'available'
   { id: 'R3', name: 'مقعد خلفي يمين', status: 'available', row: 'rear', position: 2 },
 ];
 
@@ -32,7 +32,7 @@ export const sampleTrips: Trip[] = [
     price: 75,
     startPoint: 'الرياض',
     endPoint: 'الدمام',
-    seats: JSON.parse(JSON.stringify(defaultSeats)), // Deep copy
+    seats: JSON.parse(JSON.stringify(defaultSeats)), // Deep copy, will now have all available seats
   },
   {
     id: 'trip2',
@@ -57,7 +57,7 @@ export const sampleTrips: Trip[] = [
     price: 120,
     startPoint: 'جدة',
     endPoint: 'المدينة المنورة',
-    seats: JSON.parse(JSON.stringify(defaultSeats)).map(s => s.id === 'R1' ? {...s, status: 'taken'} : s),
+    seats: JSON.parse(JSON.stringify(defaultSeats)), // Deep copy, removed custom map to ensure all available
   },
 ];
 
