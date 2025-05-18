@@ -1,0 +1,121 @@
+"use client";
+
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { LogIn, Phone, Lock } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { useToast } from '@/hooks/use-toast';
+
+const signInSchema = z.object({
+  phoneNumber: z.string().regex(/^[0-9]{10}$/, "يجب أن يتكون رقم الهاتف من 10 أرقام"),
+  password: z.string().min(6, "يجب أن تكون كلمة المرور 6 أحرف على الأقل"),
+});
+
+type SignInFormData = z.infer<typeof signInSchema>;
+
+export default function SignInPage() {
+  const router = useRouter();
+  const { toast } = useToast();
+  const form = useForm<SignInFormData>({
+    resolver: zodResolver(signInSchema),
+    defaultValues: {
+      phoneNumber: "",
+      password: "",
+    },
+  });
+
+  const onSubmit = async (data: SignInFormData) => {
+    // Placeholder for actual sign-in logic
+    console.log("Sign-in data:", data);
+    // Simulate API call
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    if (data.phoneNumber === "0500000000" && data.password === "password") {
+      toast({
+        title: "تم تسجيل الدخول بنجاح!",
+        description: "أهلاً بك مجدداً.",
+        className: "bg-success text-success-foreground border-green-300"
+      });
+      router.push('/'); // Navigate to main page on successful sign-in
+    } else {
+      toast({
+        title: "خطأ في تسجيل الدخول",
+        description: "رقم الهاتف أو كلمة المرور غير صحيحة.",
+        variant: "destructive",
+      });
+      form.setError("root", { message: "رقم الهاتف أو كلمة المرور غير صحيحة."});
+    }
+  };
+
+  return (
+    <div className="space-y-8">
+      <div className="flex items-center justify-center gap-3">
+        <LogIn className="h-8 w-8 text-primary" />
+        <h1 className="text-3xl font-bold text-center">تسجيل الدخول</h1>
+      </div>
+
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <FormField
+            control={form.control}
+            name="phoneNumber"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="flex items-center gap-2">
+                  <Phone className="h-5 w-5 text-primary" />
+                  رقم الهاتف
+                </FormLabel>
+                <FormControl>
+                  <Input type="tel" placeholder="مثال: 05XXXXXXXX" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="password"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="flex items-center gap-2">
+                  <Lock className="h-5 w-5 text-primary" />
+                  كلمة المرور
+                </FormLabel>
+                <FormControl>
+                  <Input type="password" placeholder="********" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          
+          {form.formState.errors.root && (
+             <p className="text-sm font-medium text-destructive">{form.formState.errors.root.message}</p>
+          )}
+
+          <Button 
+            type="submit" 
+            className="w-full p-3 rounded-lg text-base font-semibold transition-all duration-300 ease-in-out hover:bg-primary/90 hover:shadow-md active:scale-95"
+            disabled={form.formState.isSubmitting}
+          >
+            <LogIn className="ms-2 h-5 w-5" />
+            {form.formState.isSubmitting ? "جارِ الدخول..." : "دخول"}
+          </Button>
+        </form>
+      </Form>
+
+      <p className="text-center text-sm">
+        ليس لديك حساب؟{' '}
+        <Link href="/auth/signup" className="font-medium text-primary hover:underline">
+          إنشاء حساب جديد
+        </Link>
+      </p>
+    </div>
+  );
+}

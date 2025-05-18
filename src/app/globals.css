@@ -2,79 +2,99 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  font-family: Arial, Helvetica, sans-serif;
-}
-
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
-    --primary: 0 0% 9%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
-    --accent: 0 0% 96.1%;
-    --accent-foreground: 0 0% 9%;
+    --background: 0 0% 96%; /* #F5F5F5 Very Light Gray */
+    --foreground: 210 17% 23%; /* #2d3748 Dark Gray */
+
+    --card: 0 0% 100%; /* White */
+    --card-foreground: 210 17% 23%; /* Dark Gray */
+
+    --popover: 0 0% 100%; /* White */
+    --popover-foreground: 210 17% 23%; /* Dark Gray */
+
+    --primary: 255 51% 65%; /* #9370DB Soft Purple */
+    --primary-foreground: 0 0% 100%; /* White */
+
+    --secondary: 0 0% 90%; /* Slightly darker gray for secondary elements */
+    --secondary-foreground: 210 17% 23%; /* Dark Gray */
+
+    --muted: 0 0% 85%; /* Muted gray */
+    --muted-foreground: 0 0% 45.1%; 
+
+    --accent: 180 100% 25%; /* #008080 Teal */
+    --accent-foreground: 0 0% 100%; /* White */
+
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
+
     --border: 0 0% 89.8%;
     --input: 0 0% 89.8%;
-    --ring: 0 0% 3.9%;
+    --ring: 255 51% 65%; /* Primary color for rings */
+
+    --radius: 0.5rem; /* 8px */
+
+    /* Custom colors */
+    --seat-available-bg: 208 78% 51%; /* #3498db */
+    --seat-available-fg: 0 0% 100%;
+    --seat-selected-bg: 145 63% 49%; /* #2ecc71 */
+    --seat-selected-fg: 0 0% 100%;
+    --seat-taken-bg: 204 10% 62%; /* #95a5a6 */
+    --seat-taken-fg: 0 0% 100%;
+    --seat-driver-bg: 6 78% 57%; /* #e74c3c */
+    --seat-driver-fg: 0 0% 100%;
+    
+    --success-bg: 106 36% 89%; /* #dff0d8 */
+    --success-fg: 106 36% 30%;
+    --error-bg: 0 50% 94%; /* #f2dede */
+    --error-fg: 0 50% 40%;
+
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
     --chart-3: 197 37% 24%;
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
-    --radius: 0.5rem;
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
   }
+
   .dark {
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
+    /* Define dark theme if needed, for now keeping it consistent or slightly adjusted */
+    --background: 210 17% 10%; 
+    --foreground: 0 0% 96%;
+
+    --card: 210 17% 15%;
+    --card-foreground: 0 0% 96%;
+
+    --popover: 210 17% 10%;
+    --popover-foreground: 0 0% 96%;
+
+    --primary: 255 51% 65%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 17% 20%;
+    --secondary-foreground: 0 0% 96%;
+
+    --muted: 210 17% 25%;
     --muted-foreground: 0 0% 63.9%;
-    --accent: 0 0% 14.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
+
+    --accent: 180 100% 35%; /* Slightly lighter Teal for dark mode */
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 70% 50%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 0 0% 83.1%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+
+    --border: 210 17% 30%;
+    --input: 210 17% 30%;
+    --ring: 255 51% 65%;
+
+    --seat-available-bg: 208 78% 45%;
+    --seat-selected-bg: 145 63% 40%;
+    --seat-taken-bg: 204 10% 50%;
+    --seat-driver-bg: 6 78% 50%;
+    
+    --success-bg: 106 36% 20%; 
+    --success-fg: 106 36% 80%;
+    --error-bg: 0 50% 25%;
+    --error-fg: 0 50% 85%;
   }
 }
 
@@ -82,7 +102,23 @@ body {
   * {
     @apply border-border;
   }
+  html {
+    @apply scroll-smooth;
+  }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-cairo), sans-serif;
+  }
+}
+
+@layer utilities {
+  .h-screen-svh {
+    height: 100svh;
+  }
+  .min-h-screen-svh {
+    min-height: 100svh;
+  }
+  .max-h-screen-svh {
+    max-height: 100svh;
   }
 }

@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+const { fontFamily } = require("tailwindcss/defaultTheme");
 
 export default {
     darkMode: ["class"],
@@ -8,7 +9,17 @@ export default {
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   theme: {
+    container: {
+      center: true,
+      padding: "2rem",
+      screens: {
+        "2xl": "1400px",
+      },
+    },
   	extend: {
+      fontFamily: {
+        sans: ["var(--font-cairo)", ...fontFamily.sans],
+      },
   		colors: {
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',
@@ -50,7 +61,31 @@ export default {
   				'4': 'hsl(var(--chart-4))',
   				'5': 'hsl(var(--chart-5))'
   			},
-  			sidebar: {
+        'seat-available': {
+          DEFAULT: 'hsl(var(--seat-available-bg))',
+          foreground: 'hsl(var(--seat-available-fg))',
+        },
+        'seat-selected': {
+          DEFAULT: 'hsl(var(--seat-selected-bg))',
+          foreground: 'hsl(var(--seat-selected-fg))',
+        },
+        'seat-taken': {
+          DEFAULT: 'hsl(var(--seat-taken-bg))',
+          foreground: 'hsl(var(--seat-taken-fg))',
+        },
+        'seat-driver': {
+          DEFAULT: 'hsl(var(--seat-driver-bg))',
+          foreground: 'hsl(var(--seat-driver-fg))',
+        },
+        'success': {
+          DEFAULT: 'hsl(var(--success-bg))',
+          foreground: 'hsl(var(--success-fg))',
+        },
+        'error': {
+          DEFAULT: 'hsl(var(--error-bg))',
+          foreground: 'hsl(var(--error-fg))',
+        },
+  			sidebar: { // This was from template, might not be used
   				DEFAULT: 'hsl(var(--sidebar-background))',
   				foreground: 'hsl(var(--sidebar-foreground))',
   				primary: 'hsl(var(--sidebar-primary))',
@@ -62,9 +97,9 @@ export default {
   			}
   		},
   		borderRadius: {
-  			lg: 'var(--radius)',
-  			md: 'calc(var(--radius) - 2px)',
-  			sm: 'calc(var(--radius) - 4px)'
+  			lg: 'var(--radius)', // 8px if --radius is 0.5rem
+  			md: 'calc(var(--radius) - 2px)', // 6px
+  			sm: 'calc(var(--radius) - 4px)' // 4px
   		},
   		keyframes: {
   			'accordion-down': {
