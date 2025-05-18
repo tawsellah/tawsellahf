@@ -1,10 +1,11 @@
+
 "use client";
 
 import type { Trip } from '@/types';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Star, Car, CalendarDays, Clock, Timer, CircleDollarSign, ArrowLeft } from 'lucide-react'; 
-import Link from 'next/link';
+import Link from 'next/link'; // Link might still be used if button action differs, but for now, card handles it
 import { useRouter } from 'next/navigation';
 
 interface TripCardProps {
@@ -72,13 +73,26 @@ export function TripCard({ trip }: TripCardProps) {
           <CircleDollarSign className="h-6 w-6" />
           <span>{trip.price} ريال</span>
         </div>
-        <Button variant="ghost" size="sm" asChild onClick={(e) => e.stopPropagation()}>
-          <Link href={`/trips/${trip.id}`}>
-            عرض التفاصيل
-            <ArrowLeft className="ms-2 h-4 w-4" />
-          </Link>
+        {/* The button is now part of the clickable card area.
+            If clicked, the card's onClick will handle navigation.
+            We stop propagation here if the button were to have a *different* action in the future,
+            but for now, it simply acts as a visual cue within the larger clickable area.
+        */}
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          onClick={(e) => {
+            e.stopPropagation(); // Prevents card's onClick if button had a separate action
+            handleCardClick(); // Explicitly navigate if button itself is clicked
+          }}
+          aria-hidden="true" // Since the card is the primary link, button can be hidden from assistive tech
+          tabIndex={-1} // Remove button from tab order as card is tabbable
+        >
+          عرض التفاصيل
+          <ArrowLeft className="ms-2 h-4 w-4" />
         </Button>
       </CardFooter>
     </Card>
   );
 }
+
