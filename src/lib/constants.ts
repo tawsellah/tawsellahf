@@ -4,7 +4,7 @@ const defaultSeats: Seat[] = [
   { id: 'D1', name: 'السائق', status: 'driver', row: 'front', position: 0 },
   { id: 'F1', name: 'مقعد أمامي بجانب السائق', status: 'available', row: 'front', position: 1 },
   { id: 'R1', name: 'مقعد خلفي يسار', status: 'available', row: 'rear', position: 0 },
-  { id: 'R2', name: 'مقعد خلفي وسط', status: 'available', row: 'rear', position: 1 }, // Changed from 'taken' to 'available'
+  { id: 'R2', name: 'مقعد خلفي وسط', status: 'available', row: 'rear', position: 1 },
   { id: 'R3', name: 'مقعد خلفي يمين', status: 'available', row: 'rear', position: 2 },
 ];
 
@@ -15,8 +15,8 @@ export const sampleTrips: Trip[] = [
       name: 'أحمد محمود',
       rating: 4.5,
       photoUrl: 'https://placehold.co/80x80.png',
-      carNumber: 'س ط ح ١٢٣',
-      carModel: 'تويوتا كامري ٢٠٢٢',
+      carNumber: 'س ط ح 123', // Updated
+      carModel: 'تويوتا كامري 2022', // Updated
       carColor: '#3498db',
       carColorName: 'أزرق',
     },
@@ -26,13 +26,13 @@ export const sampleTrips: Trip[] = [
       colorName: 'أزرق',
     },
     date: '2024-08-15',
-    duration: 'ساعتان و ٣٠ دقيقة',
-    departureTime: '٠٩:٠٠ ص',
-    arrivalTime: '١١:٣٠ ص',
+    duration: 'ساعتان و 30 دقيقة', // Updated
+    departureTime: '09:00 ص', // Updated
+    arrivalTime: '11:30 ص', // Updated
     price: 75,
     startPoint: 'الرياض',
     endPoint: 'الدمام',
-    seats: JSON.parse(JSON.stringify(defaultSeats)), // Deep copy, will now have all available seats
+    seats: JSON.parse(JSON.stringify(defaultSeats)),
   },
   {
     id: 'trip2',
@@ -40,8 +40,8 @@ export const sampleTrips: Trip[] = [
       name: 'فاطمة علي',
       rating: 4.8,
       photoUrl: 'https://placehold.co/80x80.png',
-      carNumber: 'ا ب ت ٤٥٦',
-      carModel: 'هيونداي إلنترا ٢٠٢١',
+      carNumber: 'ا ب ت 456', // Updated
+      carModel: 'هيونداي إلنترا 2021', // Updated
       carColor: '#e74c3c',
       carColorName: 'أحمر',
     },
@@ -51,13 +51,13 @@ export const sampleTrips: Trip[] = [
       colorName: 'أحمر',
     },
     date: '2024-08-16',
-    duration: '٥ ساعات',
-    departureTime: '٠٢:٠٠ م',
-    arrivalTime: '٠٧:٠٠ م',
+    duration: '5 ساعات', // Updated
+    departureTime: '02:00 م', // Updated
+    arrivalTime: '07:00 م', // Updated
     price: 120,
     startPoint: 'جدة',
     endPoint: 'المدينة المنورة',
-    seats: JSON.parse(JSON.stringify(defaultSeats)), // Deep copy, removed custom map to ensure all available
+    seats: JSON.parse(JSON.stringify(defaultSeats)),
   },
 ];
 

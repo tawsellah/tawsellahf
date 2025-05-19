@@ -182,7 +182,7 @@ export default function TripDetailsPage() {
         </div>
         
         <p className="text-center font-bold text-primary text-lg">
-          المقاعد المختارة: {selectedSeats.length}
+          المقاعد المختارة: {selectedSeats.length.toLocaleString('en-US')}
         </p>
 
         {statusMessage && (
@@ -296,4 +296,3 @@ export default function TripDetailsPage() {
     </div>
   );
 }
-

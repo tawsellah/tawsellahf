@@ -5,7 +5,7 @@ import type { Trip } from '@/types';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Star, Car, CalendarDays, Clock, Timer, CircleDollarSign, ArrowLeft } from 'lucide-react'; 
-import Link from 'next/link'; // Link might still be used if button action differs, but for now, card handles it
+// import Link from 'next/link'; // Link might still be used if button action differs, but for now, card handles it
 import { useRouter } from 'next/navigation';
 
 interface TripCardProps {
@@ -33,7 +33,7 @@ export function TripCard({ trip }: TripCardProps) {
           <CardTitle className="text-xl font-bold">{trip.driver.name}</CardTitle>
           <div className="flex items-center gap-1 text-sm text-amber-500">
             <Star className="h-4 w-4 fill-amber-500 text-amber-500" />
-            <span>{trip.driver.rating.toFixed(1)}</span>
+            <span>{trip.driver.rating.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</span>
           </div>
         </div>
         <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
@@ -53,7 +53,7 @@ export function TripCard({ trip }: TripCardProps) {
       <CardContent className="p-4 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
         <div className="flex items-center gap-2">
           <CalendarDays className="h-4 w-4 text-primary" />
-          <span>{new Date(trip.date).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+          <span>{new Date(trip.date).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric', numberingSystem: 'latn' })}</span>
         </div>
         <div className="flex items-center gap-2">
           <Timer className="h-4 w-4 text-primary" /> 
@@ -71,7 +71,7 @@ export function TripCard({ trip }: TripCardProps) {
       <CardFooter className="p-4 flex items-center justify-between bg-muted/50">
         <div className="flex items-center gap-2 text-lg font-bold text-primary">
           <CircleDollarSign className="h-6 w-6" />
-          <span>{trip.price} ريال</span>
+          <span>{trip.price.toLocaleString('en-US')} دينار</span>
         </div>
         {/* The button is now part of the clickable card area.
             If clicked, the card's onClick will handle navigation.
@@ -95,4 +95,3 @@ export function TripCard({ trip }: TripCardProps) {
     </Card>
   );
 }
-
