@@ -5,7 +5,6 @@ import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState, useCallback } from 'react';
 import type { Trip, Seat as SeatType } from '@/types';
 import { getTripById } from '@/lib/constants';
-import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { DriverInfo } from '@/components/trip/DriverInfo';
 import { SeatLayout } from '@/components/trip/SeatLayout';
@@ -13,8 +12,10 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
-import { CheckCircle, XCircle, Info, Armchair, Check, ArrowLeft, Loader2, DollarSign, Smartphone } from 'lucide-react';
+import { CheckCircle, XCircle, Info, Armchair, Check, ArrowLeft, Loader2, DollarSign, Smartphone, Copy } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+
+const CLICK_PAYMENT_CODE = "CLK123ABC789"; // Example Click payment code
 
 export default function TripDetailsPage() {
   const router = useRouter();
@@ -79,8 +80,26 @@ export default function TripDetailsPage() {
       displayStatusMessage('error', 'الرجاء اختيار مقعد واحد على الأقل.');
       return;
     }
-    setCurrentPaymentSelectionInDialog(null); // Start fresh each time
+    setCurrentPaymentSelectionInDialog(null); 
     setIsPaymentDialogOpen(true);
+  };
+
+  const handleCopyClickCode = async () => {
+    try {
+      await navigator.clipboard.writeText(CLICK_PAYMENT_CODE);
+      toast({
+        title: "تم النسخ بنجاح!",
+        description: "تم نسخ رمز الدفع كليك إلى الحافظة.",
+        className: "bg-success text-success-foreground border-green-300"
+      });
+    } catch (err) {
+      console.error('Failed to copy text: ', err);
+      toast({
+        title: "خطأ",
+        description: "لم نتمكن من نسخ الرمز. الرجاء المحاولة يدوياً.",
+        variant: "destructive"
+      });
+    }
   };
 
   const handleDialogConfirmAndBook = async () => {
@@ -92,22 +111,18 @@ export default function TripDetailsPage() {
     setIsBooking(true);
     try {
       await processBooking(currentPaymentSelectionInDialog);
-      setIsPaymentDialogOpen(false); // Close dialog on success
+      setIsPaymentDialogOpen(false); 
     } catch (error) {
-      // processBooking should handle its own error toasts
       console.error("Booking failed:", error);
-    } finally {
-      // isBooking is set to false inside processBooking's finally block
     }
   };
 
   const processBooking = async (paymentType: 'cash' | 'click') => {
     if (selectedSeats.length === 0) {
        displayStatusMessage('error', 'الرجاء اختيار مقعد واحد على الأقل.');
-       setIsBooking(false); // Ensure isBooking is reset if we return early
+       setIsBooking(false); 
        throw new Error('No seats selected');
     }
-    //setIsBooking(true); // Moved to handleDialogConfirmAndBook or keep here if processBooking can be called independently
     console.log(`Booking confirmed for seats: ${selectedSeats.join(', ')} on trip: ${tripId} with payment: ${paymentType}`);
     
     try {
@@ -126,7 +141,7 @@ export default function TripDetailsPage() {
       
       const bookedSeatsCount = selectedSeats.length; 
       setSelectedSeats([]); 
-      setCurrentPaymentSelectionInDialog(null); // Reset selection after successful booking
+      setCurrentPaymentSelectionInDialog(null); 
 
       toast({
         title: "تم تأكيد الحجز بنجاح!",
@@ -136,7 +151,7 @@ export default function TripDetailsPage() {
       router.push('/');
     } catch (error) {
       toast({ title: "خطأ في الحجز", description: "لم نتمكن من إكمال الحجز. الرجاء المحاولة مرة أخرى.", variant: "destructive"});
-      throw error; // Re-throw to be caught by caller if needed
+      throw error; 
     } finally {
       setIsBooking(false);
     }
@@ -212,12 +227,12 @@ export default function TripDetailsPage() {
               onValueChange={(value: 'cash' | 'click') => setCurrentPaymentSelectionInDialog(value)}
               className="space-y-3"
             >
-              <Label htmlFor="r-cash" className="flex items-center space-x-2 space-x-reverse p-3 border rounded-md hover:bg-accent/50 transition-colors cursor-pointer has-[:checked]:bg-primary/10 has-[:checked]:border-primary">
+              <Label htmlFor="r-cash" className="flex items-center space-x-2 space-x-reverse p-3 border rounded-md hover:bg-accent/50 transition-colors cursor-pointer has-[:checked]:bg-seat-selected/20 has-[:checked]:border-seat-selected">
                 <RadioGroupItem value="cash" id="r-cash" />
                 <DollarSign className="h-5 w-5 text-primary" />
                 <span className="flex-1 text-base">كاش</span>
               </Label>
-              <Label htmlFor="r-click" className="flex items-center space-x-2 space-x-reverse p-3 border rounded-md hover:bg-accent/50 transition-colors cursor-pointer has-[:checked]:bg-primary/10 has-[:checked]:border-primary">
+              <Label htmlFor="r-click" className="flex items-center space-x-2 space-x-reverse p-3 border rounded-md hover:bg-accent/50 transition-colors cursor-pointer has-[:checked]:bg-seat-selected/20 has-[:checked]:border-seat-selected">
                 <RadioGroupItem value="click" id="r-click" />
                 <Smartphone className="h-5 w-5 text-primary" />
                 <span className="flex-1 text-base">كليك</span>
@@ -228,15 +243,16 @@ export default function TripDetailsPage() {
               <div className="mt-4 space-y-3 border-t pt-4">
                 <h4 className="text-center text-lg font-semibold text-primary">الدفع بواسطة كليك</h4>
                 <p className="text-center text-sm text-muted-foreground">يرجى استخدام الرمز التالي لإتمام عملية الدفع مع السائق:</p>
-                <div className="flex justify-center my-2">
-                  <Image
-                    src="https://placehold.co/150x150.png"
-                    alt="رمز كليك للدفع"
-                    width={150}
-                    height={150}
-                    className="rounded-lg shadow-md border"
-                    data-ai-hint="qr code payment"
-                  />
+                <div className="flex items-center justify-center gap-2 my-2 p-3 bg-muted/30 rounded-lg shadow-sm border">
+                  <span className="text-lg font-mono select-all" data-ai-hint="payment code" id="click-payment-code">{CLICK_PAYMENT_CODE}</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleCopyClickCode}
+                    aria-label="نسخ رمز الدفع"
+                  >
+                    <Copy className="h-5 w-5 text-primary hover:text-primary/80" />
+                  </Button>
                 </div>
                 <p className="text-center text-base">
                   اسم السائق: <span className="font-semibold">{trip?.driver.name}</span>
@@ -287,4 +303,3 @@ export default function TripDetailsPage() {
     </div>
   );
 }
-
