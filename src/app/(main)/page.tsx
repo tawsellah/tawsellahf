@@ -9,18 +9,18 @@ import { Input } from '@/components/ui/input';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import type { Trip } from '@/types';
+import type { Trip, FirebaseTrip, FirebaseUser } from '@/types';
 import { TripCard } from '@/components/trip/TripCard';
 import { useState } from 'react';
 import { db } from '@/lib/firebase';
 import { ref, get, query, orderByChild, equalTo } from 'firebase/database';
-import { jordanianGovernorates, parseArabicAMPMTimeToDate } from '@/lib/constants';
+import { jordanianGovernorates, formatTimeToArabicAMPM, formatDateToArabic, generateSeatsFromTripData } from '@/lib/constants';
 import { useToast } from '@/hooks/use-toast';
 
 const searchSchema = z.object({
   startPoint: z.string().min(1, "نقطة الانطلاق مطلوبة"),
   endPoint: z.string().min(1, "نقطة الوصول مطلوبة"),
-  departureTime: z.string().min(1, "وقت الانطلاق مطلوب"),
+  departureTime: z.string().min(1, "وقت وتاريخ الانطلاق مطلوب"), // This will be from <Input type="datetime-local">
 });
 
 type SearchFormData = z.infer<typeof searchSchema>;
@@ -39,48 +39,86 @@ export default function TripSearchPage() {
 
   const onSubmit = async (data: SearchFormData) => {
     form.clearErrors();
-    setSearchResults([]); // Clear previous results
+    setSearchResults([]);
+    form.setValue('departureTime', data.departureTime); // Ensure the value is set for the input field
 
     try {
       const tripsRef = ref(db, 'currentTrips');
-      // Querying by startPoint first, then filtering client-side
+      // Fetch all trips and filter client-side due to Firebase RTDB limitations on complex queries
       // For more complex queries (e.g., startPoint AND endPoint directly in DB query),
       // you might need to structure your Firebase data with composite keys or use Firestore.
-      const dbQuery = query(tripsRef, orderByChild('startPoint'), equalTo(data.startPoint));
-      const snapshot = await get(dbQuery);
+      const snapshot = await get(tripsRef);
 
       if (snapshot.exists()) {
-        const tripsData = snapshot.val();
-        const allFetchedTrips: Trip[] = Object.values(tripsData || {});
-        
+        const allTripsData = snapshot.val() as Record<string, FirebaseTrip>;
         const formDepartureDateTime = new Date(data.departureTime); // From YYYY-MM-DDTHH:mm
 
-        const filteredTrips = allFetchedTrips.filter(trip => {
-          if (trip.endPoint !== data.endPoint) {
-            return false;
-          }
+        const matchedFirebaseTrips: FirebaseTrip[] = [];
 
-          const tripDepartureDateTime = parseArabicAMPMTimeToDate(trip.date, trip.departureTime);
-          if (!tripDepartureDateTime) {
-            return false; 
+        for (const tripId in allTripsData) {
+          const fbTrip = allTripsData[tripId];
+          if (fbTrip.startPoint?.toLowerCase() === data.startPoint.toLowerCase() && 
+              fbTrip.destination?.toLowerCase() === data.endPoint.toLowerCase() &&
+              fbTrip.status === 'upcoming') { // Only show upcoming trips
+            
+            const tripDepartureDateTime = new Date(fbTrip.dateTime);
+            
+            // Compare date and time (minute precision)
+            if (tripDepartureDateTime.getFullYear() === formDepartureDateTime.getFullYear() &&
+                tripDepartureDateTime.getMonth() === formDepartureDateTime.getMonth() &&
+                tripDepartureDateTime.getDate() === formDepartureDateTime.getDate() &&
+                tripDepartureDateTime.getHours() === formDepartureDateTime.getHours() &&
+                tripDepartureDateTime.getMinutes() === formDepartureDateTime.getMinutes()) {
+              matchedFirebaseTrips.push(fbTrip);
+            }
           }
-          
-          // Exact match for date and time
-          return tripDepartureDateTime.getFullYear() === formDepartureDateTime.getFullYear() &&
-                 tripDepartureDateTime.getMonth() === formDepartureDateTime.getMonth() &&
-                 tripDepartureDateTime.getDate() === formDepartureDateTime.getDate() &&
-                 tripDepartureDateTime.getHours() === formDepartureDateTime.getHours() &&
-                 tripDepartureDateTime.getMinutes() === formDepartureDateTime.getMinutes();
-        });
+        }
 
-        if (filteredTrips.length > 0) {
-          setSearchResults(filteredTrips);
-          toast({ title: "تم العثور على رحلات", description: `تم العثور على ${filteredTrips.length} رحلة مطابقة.` });
+        if (matchedFirebaseTrips.length > 0) {
+          const enrichedTrips: Trip[] = [];
+          for (const fbTrip of matchedFirebaseTrips) {
+            const driverSnapshot = await get(ref(db, `users/${fbTrip.driverId}`));
+            if (driverSnapshot.exists()) {
+              const driverData = driverSnapshot.val() as FirebaseUser;
+              enrichedTrips.push({
+                id: fbTrip.id,
+                firebaseTripData: fbTrip,
+                driver: {
+                  id: driverData.id,
+                  name: driverData.fullName,
+                  rating: driverData.rating || 0,
+                  photoUrl: driverData.idPhotoUrl || driverData.vehiclePhotosUrl || `https://placehold.co/100x100.png?text=${driverData.fullName?.charAt(0) || 'D'}`,
+                  carNumber: driverData.vehiclePlateNumber || "غير متوفر",
+                  carModel: driverData.vehicleMakeModel || "غير متوفر",
+                  carColor: driverData.vehicleColor || "#FFFFFF",
+                  carColorName: driverData.vehicleColor, // Assuming vehicleColor can be a name
+                  clickCode: driverData.paymentMethods?.clickCode
+                },
+                car: { // Populate from driverData as per new structure
+                  name: driverData.vehicleMakeModel || "غير متوفر",
+                  color: driverData.vehicleColor || "#FFFFFF",
+                  colorName: driverData.vehicleColor,
+                },
+                date: formatDateToArabic(fbTrip.dateTime),
+                departureTime: formatTimeToArabicAMPM(fbTrip.dateTime),
+                arrivalTime: fbTrip.expectedArrivalTime,
+                price: fbTrip.pricePerPassenger,
+                startPoint: fbTrip.startPoint,
+                endPoint: fbTrip.destination,
+                meetingPoint: fbTrip.meetingPoint,
+                notes: fbTrip.notes,
+                status: fbTrip.status,
+                seats: generateSeatsFromTripData(fbTrip),
+              });
+            }
+          }
+          setSearchResults(enrichedTrips);
+          toast({ title: "تم العثور على رحلات", description: `تم العثور على ${enrichedTrips.length} رحلة مطابقة.` });
         } else {
           toast({ title: "لا توجد رحلات", description: "لم يتم العثور على رحلات تطابق معايير البحث.", variant: "default" });
         }
       } else {
-        toast({ title: "لا توجد رحلات", description: "لم يتم العثور على رحلات لنقطة الانطلاق المحددة.", variant: "default" });
+        toast({ title: "لا توجد رحلات", description: "لم يتم العثور على أي رحلات في قاعدة البيانات.", variant: "default" });
       }
     } catch (error) {
       console.error("Error searching trips:", error);
@@ -114,7 +152,7 @@ export default function TripSearchPage() {
                   </FormControl>
                   <SelectContent>
                     {jordanianGovernorates.map(gov => (
-                      <SelectItem key={gov} value={gov}>{gov}</SelectItem>
+                      <SelectItem key={gov} value={gov.toLowerCase()}>{gov}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -140,7 +178,7 @@ export default function TripSearchPage() {
                   </FormControl>
                   <SelectContent>
                     {jordanianGovernorates.map(gov => (
-                      <SelectItem key={gov} value={gov}>{gov}</SelectItem>
+                      <SelectItem key={gov} value={gov.toLowerCase()}>{gov}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
