@@ -37,7 +37,15 @@ export default function TripDetailsPage() {
 
   const fetchTripDetails = useCallback(async () => {
     setIsLoading(true);
-    setTrip(null); // Reset trip state before fetching
+    setTrip(null); 
+    setSelectedSeats([]); // Reset selected seats when fetching new trip details
+    setCurrentPaymentSelectionInDialog(null); // Reset payment selection
+    if (!tripIdFromParams) {
+        toast({ title: "خطأ", description: "معرّف الرحلة غير موجود.", variant: "destructive" });
+        setIsLoading(false);
+        router.replace('/');
+        return;
+    }
     try {
       const tripRef = ref(db, `currentTrips/${tripIdFromParams}`);
       const tripSnapshot = await get(tripRef);
@@ -141,16 +149,16 @@ export default function TripDetailsPage() {
   };
 
   const handleCopyClickCode = async () => {
-    if (!trip || !trip.driver.clickCode || trip.driver.clickCode === CLICK_PAYMENT_CODE_PLACEHOLDER) {
+    if (!actualClickCode || actualClickCode === CLICK_PAYMENT_CODE_PLACEHOLDER) {
          toast({ title: "خطأ", description: "رمز كليك للسائق غير متوفر.", variant: "destructive" });
         return;
     }
     try {
-      await navigator.clipboard.writeText(trip.driver.clickCode);
+      await navigator.clipboard.writeText(actualClickCode);
       toast({
         title: "تم النسخ بنجاح!",
         description: "تم نسخ رمز الدفع كليك إلى الحافظة.",
-        className: "bg-success text-success-foreground border-green-300"
+        className: "bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-200 border-green-300 dark:border-green-600"
       });
     } catch (err) {
       console.error('Failed to copy text: ', err);
@@ -168,27 +176,21 @@ export default function TripDetailsPage() {
       return;
     }
     
-    // setIsBooking(true); // Moved to processBooking after checks
     setIsPaymentDialogOpen(false); 
     try {
       await processBooking(currentPaymentSelectionInDialog);
     } catch (error) {
       console.error("Booking failed in handleDialogConfirmAndBook:", error);
-      // Error handling is now more robustly inside processBooking
-    } 
-    // finally { // Moved to processBooking
-    //     setIsBooking(false);
-    // }
+    }
   };
 
   const processBooking = async (paymentType: 'cash' | 'click') => {
     if (selectedSeats.length === 0 || !trip || !trip.id) {
        toast({ title: "خطأ", description: 'الرجاء اختيار مقعد واحد على الأقل أو الرحلة غير متوفرة.', variant: "destructive" });
-       setIsBooking(false); 
-       return;
+       return; // No need to set isBooking false as it's not true yet
     }
 
-    const currentTripId = trip.id; // Use ID from the fetched trip state
+    const currentTripId = trip.id;
     setIsBooking(true); 
     
     try {
@@ -230,7 +232,7 @@ export default function TripDetailsPage() {
             throw new Error("لم يتم العثور على تكوين المقاعد لهذه الرحلة.");
         }
         
-        if (!seatsUpdated && selectedSeats.length > 0) {
+        if (!seatsUpdated && selectedSeats.length > 0) { // Should not happen if above logic is correct
              throw new Error("لم يتم تحديث المقاعد المختارة في قاعدة البيانات (قد تكون محجوزة أو غير صالحة).");
         }
         
@@ -267,25 +269,28 @@ export default function TripDetailsPage() {
       toast({
         title: "تم تأكيد الحجز بنجاح!",
         description: `تم حجز ${bookedSeatsCount} ${bookedSeatsCount === 1 ? 'مقعد' : bookedSeatsCount === 2 ? 'مقعدين' : 'مقاعد'} بطريقة الدفع: ${paymentType === 'cash' ? 'كاش' : 'كليك'}. نتمنى لك رحلة سعيدة!`,
-        className: "bg-success text-success-foreground border-green-300"
+        className: "bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-200 border-green-300 dark:border-green-600"
       });
       router.push('/'); 
 
     } catch (error: any) {
-      console.error("Error during booking transaction or UI update:", error);
-       if (error.message === "Trip data not found in transaction.") {
+      if (error.message === "Trip data not found in transaction.") {
+        console.warn(`HANDLED: Booking failed because trip data for ID '${currentTripId}' was not found during transaction. This usually means the trip was deleted or the ID is incorrect.`);
         toast({ title: "خطأ في الحجز", description: "لم نتمكن من إكمال الحجز. هذه الرحلة لم تعد متوفرة أو تم حذفها.", variant: "destructive"});
-      } else if (error.message.startsWith("المقعد") || error.message.startsWith("واحد أو أكثر") || error.message.startsWith("هذه الرحلة")) { // Specific known errors
+      } else if (error.message.startsWith("المقعد") || error.message.startsWith("واحد أو أكثر") || error.message.startsWith("هذه الرحلة لم تعد متاحة") || error.message.startsWith("لم يتم العثور على تكوين المقاعد")) {
+        console.warn(`HANDLED: Booking failed due to seat/trip status issue: ${error.message}`);
         toast({ title: "خطأ في الحجز", description: error.message, variant: "destructive"});
-      }
-      else {
+      } else {
+        console.error("UNHANDLED error in processBooking:", error);
         toast({ title: "خطأ في الحجز", description: "لم نتمكن من إكمال الحجز. قد تكون المقاعد قد حُجزت أو أن الرحلة لم تعد متاحة. الرجاء المحاولة مرة أخرى.", variant: "destructive"});
       }
-      // Attempt to refresh trip details to reflect the latest state from the DB
+      
       try {
-        await fetchTripDetails();
+        await fetchTripDetails(); // Attempt to refresh trip details to reflect the latest state
       } catch (fetchError) {
         console.error("Error refetching trip details after booking failure:", fetchError);
+        // If refetch fails, the user might be stuck or see inconsistent state.
+        // Depending on the error, might want to redirect or show a more permanent error.
       }
     } finally {
         setIsBooking(false);
@@ -327,15 +332,15 @@ export default function TripDetailsPage() {
       <DriverInfo driver={trip.driver} />
       
       {trip.meetingPoint && (
-        <Alert variant="default" className="bg-blue-50 border-blue-300 text-blue-700">
-          <MapPin className="h-5 w-5 text-blue-600" />
+        <Alert variant="default" className="bg-blue-50 border-blue-300 text-blue-700 dark:bg-blue-900 dark:border-blue-700 dark:text-blue-300">
+          <MapPin className="h-5 w-5 text-blue-600 dark:text-blue-400" />
           <AlertTitle className="font-semibold">نقطة الالتقاء</AlertTitle>
           <AlertDescription>{trip.meetingPoint}</AlertDescription>
         </Alert>
       )}
       {trip.notes && (
-         <Alert variant="default" className="bg-purple-50 border-purple-300 text-purple-700">
-          <Info className="h-5 w-5 text-purple-600" />
+         <Alert variant="default" className="bg-purple-50 border-purple-300 text-purple-700 dark:bg-purple-900 dark:border-purple-700 dark:text-purple-300">
+          <Info className="h-5 w-5 text-purple-600 dark:text-purple-400" />
           <AlertTitle className="font-semibold">ملاحظات السائق</AlertTitle>
           <AlertDescription>{trip.notes}</AlertDescription>
         </Alert>
@@ -374,12 +379,12 @@ export default function TripDetailsPage() {
               onValueChange={(value: 'cash' | 'click') => setCurrentPaymentSelectionInDialog(value)}
               className="space-y-3"
             >
-              <Label htmlFor="r-cash" className={cn("flex items-center space-x-2 space-x-reverse p-3 border rounded-md hover:bg-accent/50 transition-colors cursor-pointer", currentPaymentSelectionInDialog === 'cash' ? "bg-seat-selected text-seat-selected-foreground border-seat-selected/70" : "border-border")}>
+              <Label htmlFor="r-cash" className={cn("flex items-center space-x-2 space-x-reverse p-3 border rounded-md hover:bg-accent/50 transition-colors cursor-pointer", currentPaymentSelectionInDialog === 'cash' ? "bg-green-500 text-white border-green-600 dark:bg-green-600 dark:border-green-700" : "border-border")}>
                 <RadioGroupItem value="cash" id="r-cash" />
                 <DollarSign className="h-5 w-5 text-primary" />
                 <span className="flex-1 text-base">كاش</span>
               </Label>
-              <Label htmlFor="r-click" className={cn("flex items-center space-x-2 space-x-reverse p-3 border rounded-md hover:bg-accent/50 transition-colors cursor-pointer", currentPaymentSelectionInDialog === 'click' ? "bg-seat-selected text-seat-selected-foreground border-seat-selected/70" : "border-border")}>
+              <Label htmlFor="r-click" className={cn("flex items-center space-x-2 space-x-reverse p-3 border rounded-md hover:bg-accent/50 transition-colors cursor-pointer", currentPaymentSelectionInDialog === 'click' ? "bg-green-500 text-white border-green-600 dark:bg-green-600 dark:border-green-700" : "border-border")}>
                 <RadioGroupItem value="click" id="r-click" />
                 <Smartphone className="h-5 w-5 text-primary" />
                 <span className="flex-1 text-base">كليك</span>
@@ -390,7 +395,7 @@ export default function TripDetailsPage() {
               <div className="mt-4 space-y-3 border-t pt-4">
                 <h4 className="text-center text-lg font-semibold text-primary">الدفع بواسطة كليك</h4>
                 <p className="text-center text-sm text-muted-foreground">يرجى استخدام الرمز التالي لإتمام عملية الدفع مع السائق:</p>
-                <div className="flex items-center justify-center gap-2 my-2 p-3 bg-muted/30 rounded-lg shadow-sm border">
+                <div className="flex items-center justify-center gap-2 my-2 p-3 bg-muted/30 dark:bg-muted/10 rounded-lg shadow-sm border">
                   <span className="text-lg font-mono select-all" data-ai-hint="payment code" id="click-payment-code">{actualClickCode}</span>
                   { actualClickCode !== CLICK_PAYMENT_CODE_PLACEHOLDER && (
                     <Button
@@ -457,6 +462,3 @@ export default function TripDetailsPage() {
     </div>
   );
 }
-
-
-      
