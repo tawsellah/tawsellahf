@@ -24,7 +24,7 @@ export default function TripDetailsPage() {
   const router = useRouter();
   const params = useParams();
   const { toast } = useToast();
-  const tripId = typeof params.tripId === 'string' ? params.tripId : '';
+  const tripIdFromParams = typeof params.tripId === 'string' ? params.tripId : '';
 
   const [trip, setTrip] = useState<Trip | null>(null);
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
@@ -37,8 +37,9 @@ export default function TripDetailsPage() {
 
   const fetchTripDetails = useCallback(async () => {
     setIsLoading(true);
+    setTrip(null); // Reset trip state before fetching
     try {
-      const tripRef = ref(db, `currentTrips/${tripId}`);
+      const tripRef = ref(db, `currentTrips/${tripIdFromParams}`);
       const tripSnapshot = await get(tripRef);
 
       if (tripSnapshot.exists()) {
@@ -87,22 +88,24 @@ export default function TripDetailsPage() {
         }
       } else {
         toast({ title: "خطأ", description: "الرحلة غير موجودة", variant: "destructive" });
+        setTrip(null); 
         router.replace('/');
       }
     } catch (error) {
       console.error("Error fetching trip details:", error);
       toast({ title: "خطأ", description: "لا يمكن تحميل تفاصيل الرحلة.", variant: "destructive" });
+      setTrip(null);
       router.replace('/');
     } finally {
       setIsLoading(false);
     }
-  }, [tripId, router, toast]);
+  }, [tripIdFromParams, router, toast]);
 
   useEffect(() => {
-    if (tripId) {
+    if (tripIdFromParams) {
       fetchTripDetails();
     }
-  }, [tripId, fetchTripDetails]);
+  }, [tripIdFromParams, fetchTripDetails]);
 
   const handleSeatClick = useCallback((seatId: string) => {
     setTrip(currentTrip => {
@@ -165,30 +168,31 @@ export default function TripDetailsPage() {
       return;
     }
     
-    setIsBooking(true);
+    // setIsBooking(true); // Moved to processBooking after checks
     setIsPaymentDialogOpen(false); 
     try {
       await processBooking(currentPaymentSelectionInDialog);
     } catch (error) {
       console.error("Booking failed in handleDialogConfirmAndBook:", error);
-      // This catch block is for errors not handled within processBooking itself,
-      // or if processBooking re-throws, which it currently doesn't.
-      // UI updates for specific booking errors are handled inside processBooking's catch.
-    } finally {
-        setIsBooking(false);
-    }
+      // Error handling is now more robustly inside processBooking
+    } 
+    // finally { // Moved to processBooking
+    //     setIsBooking(false);
+    // }
   };
 
   const processBooking = async (paymentType: 'cash' | 'click') => {
-    if (selectedSeats.length === 0 || !trip) {
-       toast({ title: "خطأ", description: 'الرجاء اختيار مقعد واحد على الأقل.', variant: "destructive" });
+    if (selectedSeats.length === 0 || !trip || !trip.id) {
+       toast({ title: "خطأ", description: 'الرجاء اختيار مقعد واحد على الأقل أو الرحلة غير متوفرة.', variant: "destructive" });
        setIsBooking(false); 
-       // Explicitly throw or return to prevent reaching transaction with invalid state
-       return; // Or throw new Error('No seats selected or trip is null (client-side check)');
+       return;
     }
+
+    const currentTripId = trip.id; // Use ID from the fetched trip state
+    setIsBooking(true); 
     
     try {
-      const tripRef = ref(db, `currentTrips/${tripId}`);
+      const tripRef = ref(db, `currentTrips/${currentTripId}`);
       
       await runTransaction(tripRef, (currentFirebaseTripData: FirebaseTripType | null): FirebaseTripType | undefined => {
         if (!currentFirebaseTripData) {
@@ -271,16 +275,20 @@ export default function TripDetailsPage() {
       console.error("Error during booking transaction or UI update:", error);
        if (error.message === "Trip data not found in transaction.") {
         toast({ title: "خطأ في الحجز", description: "لم نتمكن من إكمال الحجز. هذه الرحلة لم تعد متوفرة أو تم حذفها.", variant: "destructive"});
-      } else {
-        toast({ title: "خطأ في الحجز", description: error.message || "لم نتمكن من إكمال الحجز. قد تكون المقاعد قد حُجزت أو أن الرحلة لم تعد متاحة. الرجاء المحاولة مرة أخرى.", variant: "destructive"});
+      } else if (error.message.startsWith("المقعد") || error.message.startsWith("واحد أو أكثر") || error.message.startsWith("هذه الرحلة")) { // Specific known errors
+        toast({ title: "خطأ في الحجز", description: error.message, variant: "destructive"});
+      }
+      else {
+        toast({ title: "خطأ في الحجز", description: "لم نتمكن من إكمال الحجز. قد تكون المقاعد قد حُجزت أو أن الرحلة لم تعد متاحة. الرجاء المحاولة مرة أخرى.", variant: "destructive"});
       }
       // Attempt to refresh trip details to reflect the latest state from the DB
       try {
         await fetchTripDetails();
       } catch (fetchError) {
         console.error("Error refetching trip details after booking failure:", fetchError);
-        // If refetch also fails, the user might already be redirected or shown an error by fetchTripDetails itself.
       }
+    } finally {
+        setIsBooking(false);
     }
   };
 
@@ -450,3 +458,5 @@ export default function TripDetailsPage() {
   );
 }
 
+
+      
