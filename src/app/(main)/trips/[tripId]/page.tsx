@@ -171,6 +171,9 @@ export default function TripDetailsPage() {
       await processBooking(currentPaymentSelectionInDialog);
     } catch (error) {
       console.error("Booking failed in handleDialogConfirmAndBook:", error);
+      // This catch block is for errors not handled within processBooking itself,
+      // or if processBooking re-throws, which it currently doesn't.
+      // UI updates for specific booking errors are handled inside processBooking's catch.
     } finally {
         setIsBooking(false);
     }
@@ -180,7 +183,8 @@ export default function TripDetailsPage() {
     if (selectedSeats.length === 0 || !trip) {
        toast({ title: "خطأ", description: 'الرجاء اختيار مقعد واحد على الأقل.', variant: "destructive" });
        setIsBooking(false); 
-       throw new Error('No seats selected or trip is null');
+       // Explicitly throw or return to prevent reaching transaction with invalid state
+       return; // Or throw new Error('No seats selected or trip is null (client-side check)');
     }
     
     try {
@@ -201,7 +205,7 @@ export default function TripDetailsPage() {
           let newOfferedSeatsConfig = { ...(currentFirebaseTripData.offeredSeatsConfig || {}) };
           selectedSeats.forEach(seatId => {
             if (newOfferedSeatsConfig.hasOwnProperty(seatId) && newOfferedSeatsConfig[seatId] === true) { 
-              newOfferedSeatsConfig[seatId] = false; // Mark as taken (false)
+              newOfferedSeatsConfig[seatId] = false; 
               seatsUpdated = true;
             } else {
               throw new Error(`المقعد ${seatId} غير متاح أو تم حجزه بالفعل.`);
@@ -270,7 +274,13 @@ export default function TripDetailsPage() {
       } else {
         toast({ title: "خطأ في الحجز", description: error.message || "لم نتمكن من إكمال الحجز. قد تكون المقاعد قد حُجزت أو أن الرحلة لم تعد متاحة. الرجاء المحاولة مرة أخرى.", variant: "destructive"});
       }
-      fetchTripDetails(); 
+      // Attempt to refresh trip details to reflect the latest state from the DB
+      try {
+        await fetchTripDetails();
+      } catch (fetchError) {
+        console.error("Error refetching trip details after booking failure:", fetchError);
+        // If refetch also fails, the user might already be redirected or shown an error by fetchTripDetails itself.
+      }
     }
   };
 
