@@ -4,7 +4,6 @@
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState, useCallback } from 'react';
 import type { Trip, Seat as SeatType } from '@/types';
-import { getTripById } from '@/lib/constants';
 import { Button } from '@/components/ui/button';
 import { DriverInfo } from '@/components/trip/DriverInfo';
 import { SeatLayout } from '@/components/trip/SeatLayout';
@@ -14,6 +13,10 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { CheckCircle, XCircle, Info, Armchair, Check, ArrowLeft, Loader2, DollarSign, Smartphone, Copy } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { db } from '@/lib/firebase';
+import { ref, get, set, update } from 'firebase/database'; // Added set and update
+import { defaultSeats } from '@/lib/constants';
+
 
 const CLICK_PAYMENT_CODE = "CLK123ABC789"; // Example Click payment code
 
@@ -34,20 +37,48 @@ export default function TripDetailsPage() {
 
   useEffect(() => {
     if (tripId) {
-      const fetchedTrip = getTripById(tripId);
-      if (fetchedTrip) {
-        setTrip(fetchedTrip);
-      } else {
-        toast({ title: "خطأ", description: "الرحلة غير موجودة", variant: "destructive" });
-        router.replace('/');
-      }
-      setIsLoading(false);
+      const fetchTripDetails = async () => {
+        setIsLoading(true);
+        try {
+          const tripRef = ref(db, `currentTrips/${tripId}`);
+          const snapshot = await get(tripRef);
+          if (snapshot.exists()) {
+            // Ensure seats are initialized if not present or in a different format
+            const fetchedTripData = snapshot.val() as Omit<Trip, 'seats'> & { seats?: SeatType[] | Record<string, SeatType> };
+            let processedSeats: SeatType[];
+
+            if (!fetchedTripData.seats) {
+              processedSeats = JSON.parse(JSON.stringify(defaultSeats)); // Use default if no seats in DB
+            } else if (Array.isArray(fetchedTripData.seats)) {
+              processedSeats = fetchedTripData.seats;
+            } else if (typeof fetchedTripData.seats === 'object') {
+              // If seats are stored as an object in Firebase, convert to array
+              processedSeats = Object.values(fetchedTripData.seats);
+            } else {
+              processedSeats = JSON.parse(JSON.stringify(defaultSeats)); // Fallback
+            }
+            
+            setTrip({ ...fetchedTripData, id: tripId, seats: processedSeats } as Trip);
+
+          } else {
+            toast({ title: "خطأ", description: "الرحلة غير موجودة", variant: "destructive" });
+            router.replace('/');
+          }
+        } catch (error) {
+          console.error("Error fetching trip details:", error);
+          toast({ title: "خطأ", description: "ไม่สามารถ تحميل تفاصيل الرحلة.", variant: "destructive" });
+          router.replace('/');
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      fetchTripDetails();
     }
   }, [tripId, router, toast]);
 
   const handleSeatClick = useCallback((seatId: string) => {
     setTrip(currentTrip => {
-      if (!currentTrip || isBooking) return null;
+      if (!currentTrip || isBooking) return currentTrip; // Return currentTrip instead of null to prevent UI flicker
       const seatIndex = currentTrip.seats.findIndex(s => s.id === seatId);
       if (seatIndex === -1) return currentTrip;
 
@@ -72,12 +103,13 @@ export default function TripDetailsPage() {
 
   const displayStatusMessage = (type: 'success' | 'error', message: string) => {
     setStatusMessage({ type, message });
-    setTimeout(() => setStatusMessage(null), 3000);
+    // Consider using toast for more persistent messages or longer display time
+    // setTimeout(() => setStatusMessage(null), 3000); 
   };
 
   const handleProceedToPayment = () => {
     if (selectedSeats.length === 0) {
-      displayStatusMessage('error', 'الرجاء اختيار مقعد واحد على الأقل.');
+      toast({ title: "خطأ", description: 'الرجاء اختيار مقعد واحد على الأقل.', variant: "destructive" });
       return;
     }
     setCurrentPaymentSelectionInDialog(null); 
@@ -109,34 +141,47 @@ export default function TripDetailsPage() {
     }
     
     setIsBooking(true);
+    setIsPaymentDialogOpen(false); // Close dialog before processing
     try {
       await processBooking(currentPaymentSelectionInDialog);
-      setIsPaymentDialogOpen(false); 
     } catch (error) {
       console.error("Booking failed:", error);
+      // Error toast is handled within processBooking
+    } finally {
+        setIsBooking(false);
     }
   };
 
   const processBooking = async (paymentType: 'cash' | 'click') => {
-    if (selectedSeats.length === 0) {
-       displayStatusMessage('error', 'الرجاء اختيار مقعد واحد على الأقل.');
+    if (selectedSeats.length === 0 || !trip) {
+       toast({ title: "خطأ", description: 'الرجاء اختيار مقعد واحد على الأقل.', variant: "destructive" });
        setIsBooking(false); 
-       throw new Error('No seats selected');
+       throw new Error('No seats selected or trip is null');
     }
     console.log(`Booking confirmed for seats: ${selectedSeats.join(', ')} on trip: ${tripId} with payment: ${paymentType}`);
     
     try {
+      // Simulate API call delay
       await new Promise(resolve => setTimeout(resolve, 1500)); 
+      
+      const updatedSeatsArray = trip.seats.map(seat => {
+        if (selectedSeats.includes(seat.id)) {
+          return { ...seat, status: 'taken' as SeatType['status'] };
+        }
+        return seat;
+      });
+
+      // Update Firebase with the new seat statuses
+      const tripSeatsRef = ref(db, `currentTrips/${tripId}/seats`);
+      // Firebase RTDB works well with objects for lists where keys are indices or unique IDs.
+      // If seats are stored as an array, you might need to set the whole array.
+      // If seats are an object { "S1": {...}, "S2": {...} }, update specific seat paths.
+      // Assuming seats are stored as an array in Firebase based on current types:
+      await set(tripSeatsRef, updatedSeatsArray);
       
       setTrip(currentTrip => {
         if (!currentTrip) return null;
-        const newSeatsArray = currentTrip.seats.map(seat => {
-          if (selectedSeats.includes(seat.id)) {
-            return { ...seat, status: 'taken' as SeatType['status'] };
-          }
-          return seat;
-        });
-        return { ...currentTrip, seats: newSeatsArray };
+        return { ...currentTrip, seats: updatedSeatsArray };
       });
       
       const bookedSeatsCount = selectedSeats.length; 
@@ -150,10 +195,9 @@ export default function TripDetailsPage() {
       });
       router.push('/');
     } catch (error) {
+      console.error("Error during booking process or Firebase update:", error);
       toast({ title: "خطأ في الحجز", description: "لم نتمكن من إكمال الحجز. الرجاء المحاولة مرة أخرى.", variant: "destructive"});
       throw error; 
-    } finally {
-      setIsBooking(false);
     }
   };
 
@@ -201,7 +245,7 @@ export default function TripDetailsPage() {
         </p>
 
         {statusMessage && (
-          <Alert variant={statusMessage.type === 'success' ? 'default' : 'destructive'} className={statusMessage.type === 'success' ? 'bg-success text-success-foreground border-green-300' : 'bg-error text-error-foreground border-red-300'}>
+          <Alert variant={statusMessage.type === 'success' ? 'default' : 'destructive'} className={statusMessage.type === 'success' ? 'bg-success text-success-foreground border-green-300' : 'border-red-300'}>
              {statusMessage.type === 'success' ? <CheckCircle className="h-5 w-5" /> : <XCircle className="h-5 w-5" />}
             <AlertTitle className="font-semibold">{statusMessage.type === 'success' ? 'نجاح!' : 'خطأ!'}</AlertTitle>
             <AlertDescription>{statusMessage.message}</AlertDescription>
@@ -227,12 +271,12 @@ export default function TripDetailsPage() {
               onValueChange={(value: 'cash' | 'click') => setCurrentPaymentSelectionInDialog(value)}
               className="space-y-3"
             >
-              <Label htmlFor="r-cash" className="flex items-center space-x-2 space-x-reverse p-3 border rounded-md hover:bg-accent/50 transition-colors cursor-pointer has-[:checked]:bg-seat-selected/20 has-[:checked]:border-seat-selected">
+              <Label htmlFor="r-cash" className="flex items-center space-x-2 space-x-reverse p-3 border rounded-md hover:bg-accent/50 transition-colors cursor-pointer has-[:checked]:bg-seat-selected has-[:checked]:text-seat-selected-foreground has-[:checked]:border-seat-selected/70">
                 <RadioGroupItem value="cash" id="r-cash" />
                 <DollarSign className="h-5 w-5 text-primary" />
                 <span className="flex-1 text-base">كاش</span>
               </Label>
-              <Label htmlFor="r-click" className="flex items-center space-x-2 space-x-reverse p-3 border rounded-md hover:bg-accent/50 transition-colors cursor-pointer has-[:checked]:bg-seat-selected/20 has-[:checked]:border-seat-selected">
+              <Label htmlFor="r-click" className="flex items-center space-x-2 space-x-reverse p-3 border rounded-md hover:bg-accent/50 transition-colors cursor-pointer has-[:checked]:bg-seat-selected has-[:checked]:text-seat-selected-foreground has-[:checked]:border-seat-selected/70">
                 <RadioGroupItem value="click" id="r-click" />
                 <Smartphone className="h-5 w-5 text-primary" />
                 <span className="flex-1 text-base">كليك</span>
@@ -262,7 +306,9 @@ export default function TripDetailsPage() {
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
             <DialogClose asChild>
-              <Button variant="outline" disabled={isBooking} onClick={() => setCurrentPaymentSelectionInDialog(null)}>إلغاء</Button>
+              <Button variant="outline" disabled={isBooking} onClick={() => {
+                if (!isBooking) setCurrentPaymentSelectionInDialog(null);
+              }}>إلغاء</Button>
             </DialogClose>
             <Button 
               onClick={handleDialogConfirmAndBook} 

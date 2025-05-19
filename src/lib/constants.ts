@@ -1,6 +1,6 @@
-import type { Trip, Seat } from '@/types';
+import type { Seat } from '@/types';
 
-const defaultSeats: Seat[] = [
+export const defaultSeats: Seat[] = [
   { id: 'D1', name: 'السائق', status: 'driver', row: 'front', position: 0 },
   { id: 'F1', name: 'مقعد أمامي بجانب السائق', status: 'available', row: 'front', position: 1 },
   { id: 'R1', name: 'مقعد خلفي يسار', status: 'available', row: 'rear', position: 0 },
@@ -8,64 +8,44 @@ const defaultSeats: Seat[] = [
   { id: 'R3', name: 'مقعد خلفي يمين', status: 'available', row: 'rear', position: 2 },
 ];
 
-export const sampleTrips: Trip[] = [
-  {
-    id: 'trip1',
-    driver: {
-      name: 'أحمد محمود',
-      rating: 4.5,
-      photoUrl: 'https://placehold.co/80x80.png',
-      carNumber: 'س ط ح 123', // Updated
-      carModel: 'تويوتا كامري 2022', // Updated
-      carColor: '#3498db',
-      carColorName: 'أزرق',
-    },
-    car: {
-      name: 'تويوتا كامري',
-      color: '#3498db',
-      colorName: 'أزرق',
-    },
-    date: '2024-08-15',
-    duration: 'ساعتان و 30 دقيقة', // Updated
-    departureTime: '09:00 ص', // Updated
-    arrivalTime: '11:30 ص', // Updated
-    price: 75,
-    startPoint: 'الرياض',
-    endPoint: 'الدمام',
-    seats: JSON.parse(JSON.stringify(defaultSeats)),
-  },
-  {
-    id: 'trip2',
-    driver: {
-      name: 'فاطمة علي',
-      rating: 4.8,
-      photoUrl: 'https://placehold.co/80x80.png',
-      carNumber: 'ا ب ت 456', // Updated
-      carModel: 'هيونداي إلنترا 2021', // Updated
-      carColor: '#e74c3c',
-      carColorName: 'أحمر',
-    },
-    car: {
-      name: 'هيونداي إلنترا',
-      color: '#e74c3c',
-      colorName: 'أحمر',
-    },
-    date: '2024-08-16',
-    duration: '5 ساعات', // Updated
-    departureTime: '02:00 م', // Updated
-    arrivalTime: '07:00 م', // Updated
-    price: 120,
-    startPoint: 'جدة',
-    endPoint: 'المدينة المنورة',
-    seats: JSON.parse(JSON.stringify(defaultSeats)),
-  },
+export const jordanianGovernorates: string[] = [
+  'عمان', 'الزرقاء', 'إربد', 'العقبة', 'المفرق', 'جرش', 'مادبا', 'البلقاء', 'الكرك', 'معان', 'عجلون', 'الطفيلة'
 ];
 
-export const getTripById = (id: string): Trip | undefined => {
-  const trip = sampleTrips.find(t => t.id === id);
-  if (trip) {
-    // Ensure fresh copy of seats for detail page
-    return { ...trip, seats: JSON.parse(JSON.stringify(trip.seats)) };
+// Helper function to convert "HH:mm ص/م" along with a date string to a Date object
+export function parseArabicAMPMTimeToDate(dateStr: string, timeStr: string): Date | null {
+  const timeMatch = timeStr.match(/(\d{1,2}):(\d{2})\s*(ص|م)/);
+  if (!timeMatch) {
+    console.error("Invalid time format:", timeStr);
+    return null;
   }
-  return undefined;
-};
+
+  let hours = parseInt(timeMatch[1], 10);
+  const minutes = parseInt(timeMatch[2], 10);
+  const period = timeMatch[3];
+
+  if (period === 'م' && hours < 12) {
+    hours += 12;
+  } else if (period === 'ص' && hours === 12) { // 12 AM (Midnight) is 00 hours
+    hours = 0;
+  } else if (period === 'م' && hours === 12) { // 12 PM (Noon) is 12 hours, no change needed
+    // hours is already 12
+  }
+
+
+  // Ensure hours are within 0-23 range after adjustments
+  hours = hours % 24;
+
+  try {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    // Month is 0-indexed in JavaScript Date
+    if (isNaN(year) || isNaN(month) || isNaN(day) || isNaN(hours) || isNaN(minutes)) {
+        console.error("Invalid date parts:", dateStr, timeStr);
+        return null;
+    }
+    return new Date(year, month - 1, day, hours, minutes);
+  } catch (e) {
+    console.error("Error creating date object:", e);
+    return null;
+  }
+}

@@ -1,17 +1,21 @@
 
 "use client";
 
-import { Search, MapPin, Flag, Clock } from 'lucide-react';
+import { Search, MapPin, Flag, Clock, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from '@/components/ui/input';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import type { Trip } from '@/types';
-import { sampleTrips } from '@/lib/constants';
 import { TripCard } from '@/components/trip/TripCard';
 import { useState } from 'react';
+import { db } from '@/lib/firebase';
+import { ref, get, query, orderByChild, equalTo } from 'firebase/database';
+import { jordanianGovernorates, parseArabicAMPMTimeToDate } from '@/lib/constants';
+import { useToast } from '@/hooks/use-toast';
 
 const searchSchema = z.object({
   startPoint: z.string().min(1, "نقطة الانطلاق مطلوبة"),
@@ -23,6 +27,7 @@ type SearchFormData = z.infer<typeof searchSchema>;
 
 export default function TripSearchPage() {
   const [searchResults, setSearchResults] = useState<Trip[]>([]);
+  const { toast } = useToast();
   const form = useForm<SearchFormData>({
     resolver: zodResolver(searchSchema),
     defaultValues: {
@@ -32,10 +37,55 @@ export default function TripSearchPage() {
     },
   });
 
-  const onSubmit = (data: SearchFormData) => {
-    console.log("Search data:", data);
-    // Simulate API call
-    setSearchResults(sampleTrips); 
+  const onSubmit = async (data: SearchFormData) => {
+    form.clearErrors();
+    setSearchResults([]); // Clear previous results
+
+    try {
+      const tripsRef = ref(db, 'currentTrips');
+      // Querying by startPoint first, then filtering client-side
+      // For more complex queries (e.g., startPoint AND endPoint directly in DB query),
+      // you might need to structure your Firebase data with composite keys or use Firestore.
+      const dbQuery = query(tripsRef, orderByChild('startPoint'), equalTo(data.startPoint));
+      const snapshot = await get(dbQuery);
+
+      if (snapshot.exists()) {
+        const tripsData = snapshot.val();
+        const allFetchedTrips: Trip[] = Object.values(tripsData || {});
+        
+        const formDepartureDateTime = new Date(data.departureTime); // From YYYY-MM-DDTHH:mm
+
+        const filteredTrips = allFetchedTrips.filter(trip => {
+          if (trip.endPoint !== data.endPoint) {
+            return false;
+          }
+
+          const tripDepartureDateTime = parseArabicAMPMTimeToDate(trip.date, trip.departureTime);
+          if (!tripDepartureDateTime) {
+            return false; 
+          }
+          
+          // Exact match for date and time
+          return tripDepartureDateTime.getFullYear() === formDepartureDateTime.getFullYear() &&
+                 tripDepartureDateTime.getMonth() === formDepartureDateTime.getMonth() &&
+                 tripDepartureDateTime.getDate() === formDepartureDateTime.getDate() &&
+                 tripDepartureDateTime.getHours() === formDepartureDateTime.getHours() &&
+                 tripDepartureDateTime.getMinutes() === formDepartureDateTime.getMinutes();
+        });
+
+        if (filteredTrips.length > 0) {
+          setSearchResults(filteredTrips);
+          toast({ title: "تم العثور على رحلات", description: `تم العثور على ${filteredTrips.length} رحلة مطابقة.` });
+        } else {
+          toast({ title: "لا توجد رحلات", description: "لم يتم العثور على رحلات تطابق معايير البحث.", variant: "default" });
+        }
+      } else {
+        toast({ title: "لا توجد رحلات", description: "لم يتم العثور على رحلات لنقطة الانطلاق المحددة.", variant: "default" });
+      }
+    } catch (error) {
+      console.error("Error searching trips:", error);
+      toast({ title: "خطأ في البحث", description: "حدث خطأ أثناء البحث عن الرحلات. الرجاء المحاولة مرة أخرى.", variant: "destructive" });
+    }
   };
 
   return (
@@ -56,9 +106,18 @@ export default function TripSearchPage() {
                   <MapPin className="h-5 w-5 text-primary" />
                   نقطة الانطلاق
                 </FormLabel>
-                <FormControl>
-                  <Input placeholder="مثال: عمان" {...field} />
-                </FormControl>
+                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="اختر نقطة الانطلاق" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {jordanianGovernorates.map(gov => (
+                      <SelectItem key={gov} value={gov}>{gov}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <FormMessage />
               </FormItem>
             )}
@@ -73,9 +132,18 @@ export default function TripSearchPage() {
                   <Flag className="h-5 w-5 text-primary" />
                   نقطة الوصول
                 </FormLabel>
-                <FormControl>
-                  <Input placeholder="مثال: الزرقاء" {...field} />
-                </FormControl>
+                 <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="اختر نقطة الوصول" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {jordanianGovernorates.map(gov => (
+                      <SelectItem key={gov} value={gov}>{gov}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <FormMessage />
               </FormItem>
             )}
@@ -88,7 +156,7 @@ export default function TripSearchPage() {
               <FormItem>
                 <FormLabel className="flex items-center gap-2">
                   <Clock className="h-5 w-5 text-primary" />
-                  وقت الانطلاق
+                  وقت وتاريخ الانطلاق
                 </FormLabel>
                 <FormControl>
                   <Input type="datetime-local" {...field} />
@@ -99,9 +167,8 @@ export default function TripSearchPage() {
           />
 
           <Button type="submit" className="w-full p-3 rounded-lg text-base font-semibold transition-all duration-300 ease-in-out hover:bg-primary/90 hover:shadow-md active:scale-95" disabled={form.formState.isSubmitting}>
-            <Search className="ms-2 h-5 w-5" />
-            بحث
-            {form.formState.isSubmitting && "..."}
+            {form.formState.isSubmitting ? <Loader2 className="ms-2 h-5 w-5 animate-spin" /> : <Search className="ms-2 h-5 w-5" />}
+            {form.formState.isSubmitting ? "جارِ البحث..." : "بحث"}
           </Button>
         </form>
       </Form>
