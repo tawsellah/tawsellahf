@@ -13,7 +13,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
-import { CheckCircle, XCircle, Info, Armchair, Check, ArrowLeft, Loader2 } from 'lucide-react';
+import { CheckCircle, XCircle, Info, Armchair, Check, ArrowLeft, Loader2, DollarSign, Smartphone } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export default function TripDetailsPage() {
@@ -30,8 +30,6 @@ export default function TripDetailsPage() {
 
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
   const [currentPaymentSelectionInDialog, setCurrentPaymentSelectionInDialog] = useState<'cash' | 'click' | null>(null);
-  const [finalPaymentMethod, setFinalPaymentMethod] = useState<'cash' | 'click' | null>(null);
-
 
   useEffect(() => {
     if (tripId) {
@@ -48,19 +46,13 @@ export default function TripDetailsPage() {
 
   const handleSeatClick = useCallback((seatId: string) => {
     setTrip(currentTrip => {
-      if (!currentTrip || isBooking) return null; // Prevent changes during booking
+      if (!currentTrip || isBooking) return null;
       const seatIndex = currentTrip.seats.findIndex(s => s.id === seatId);
       if (seatIndex === -1) return currentTrip;
 
       const seat = currentTrip.seats[seatIndex];
       if (seat.status === 'taken' || seat.status === 'driver') return currentTrip;
       
-      // If a payment method ('click') is already chosen and details are shown,
-      // changing seats should reset the payment choice to force re-confirmation.
-      if (finalPaymentMethod === 'click') {
-        setFinalPaymentMethod(null); 
-      }
-
       const newSeats = [...currentTrip.seats];
       let newSelectedSeatIds: string[];
 
@@ -74,7 +66,7 @@ export default function TripDetailsPage() {
       setSelectedSeats(newSelectedSeatIds);
       return { ...currentTrip, seats: newSeats };
     });
-  }, [selectedSeats, isBooking, finalPaymentMethod]);
+  }, [selectedSeats, isBooking]);
 
 
   const displayStatusMessage = (type: 'success' | 'error', message: string) => {
@@ -87,59 +79,67 @@ export default function TripDetailsPage() {
       displayStatusMessage('error', 'الرجاء اختيار مقعد واحد على الأقل.');
       return;
     }
-    setCurrentPaymentSelectionInDialog(finalPaymentMethod); // Pre-fill if re-opened
+    setCurrentPaymentSelectionInDialog(null); // Start fresh each time
     setIsPaymentDialogOpen(true);
   };
 
-  const handleConfirmPaymentChoice = () => {
+  const handleDialogConfirmAndBook = async () => {
     if (!currentPaymentSelectionInDialog) {
       toast({ title: "خطأ", description: "يرجى اختيار طريقة الدفع.", variant: "destructive" });
       return;
     }
-    setFinalPaymentMethod(currentPaymentSelectionInDialog);
-    setIsPaymentDialogOpen(false);
-
-    if (currentPaymentSelectionInDialog === 'cash') {
-      processBooking('cash');
+    
+    setIsBooking(true);
+    try {
+      await processBooking(currentPaymentSelectionInDialog);
+      setIsPaymentDialogOpen(false); // Close dialog on success
+    } catch (error) {
+      // processBooking should handle its own error toasts
+      console.error("Booking failed:", error);
+    } finally {
+      // isBooking is set to false inside processBooking's finally block
     }
-    // If 'click', UI will update based on finalPaymentMethod to show QR code and new button.
   };
 
   const processBooking = async (paymentType: 'cash' | 'click') => {
     if (selectedSeats.length === 0) {
        displayStatusMessage('error', 'الرجاء اختيار مقعد واحد على الأقل.');
-       return;
+       setIsBooking(false); // Ensure isBooking is reset if we return early
+       throw new Error('No seats selected');
     }
-    setIsBooking(true);
+    //setIsBooking(true); // Moved to handleDialogConfirmAndBook or keep here if processBooking can be called independently
     console.log(`Booking confirmed for seats: ${selectedSeats.join(', ')} on trip: ${tripId} with payment: ${paymentType}`);
-    await new Promise(resolve => setTimeout(resolve, 1500)); 
     
-    setIsBooking(false);
-    
-    setTrip(currentTrip => {
-      if (!currentTrip) return null;
-      const newSeatsArray = currentTrip.seats.map(seat => {
-        if (selectedSeats.includes(seat.id)) {
-          return { ...seat, status: 'taken' as SeatType['status'] };
-        }
-        return seat;
+    try {
+      await new Promise(resolve => setTimeout(resolve, 1500)); 
+      
+      setTrip(currentTrip => {
+        if (!currentTrip) return null;
+        const newSeatsArray = currentTrip.seats.map(seat => {
+          if (selectedSeats.includes(seat.id)) {
+            return { ...seat, status: 'taken' as SeatType['status'] };
+          }
+          return seat;
+        });
+        return { ...currentTrip, seats: newSeatsArray };
       });
-      return { ...currentTrip, seats: newSeatsArray };
-    });
-    
-    // Reset states after booking logic is complete
-    const bookedSeatsCount = selectedSeats.length; // Store before clearing
-    setSelectedSeats([]); 
-    setFinalPaymentMethod(null); 
-    setCurrentPaymentSelectionInDialog(null);
+      
+      const bookedSeatsCount = selectedSeats.length; 
+      setSelectedSeats([]); 
+      setCurrentPaymentSelectionInDialog(null); // Reset selection after successful booking
 
-
-    toast({
-      title: "تم تأكيد الحجز بنجاح!",
-      description: `تم حجز ${bookedSeatsCount} ${bookedSeatsCount === 1 ? 'مقعد' : bookedSeatsCount === 2 ? 'مقعدين' : 'مقاعد'} بطريقة الدفع: ${paymentType === 'cash' ? 'كاش' : 'كليك'}. نتمنى لك رحلة سعيدة!`,
-      className: "bg-success text-success-foreground border-green-300"
-    });
-    router.push('/');
+      toast({
+        title: "تم تأكيد الحجز بنجاح!",
+        description: `تم حجز ${bookedSeatsCount} ${bookedSeatsCount === 1 ? 'مقعد' : bookedSeatsCount === 2 ? 'مقعدين' : 'مقاعد'} بطريقة الدفع: ${paymentType === 'cash' ? 'كاش' : 'كليك'}. نتمنى لك رحلة سعيدة!`,
+        className: "bg-success text-success-foreground border-green-300"
+      });
+      router.push('/');
+    } catch (error) {
+      toast({ title: "خطأ في الحجز", description: "لم نتمكن من إكمال الحجز. الرجاء المحاولة مرة أخرى.", variant: "destructive"});
+      throw error; // Re-throw to be caught by caller if needed
+    } finally {
+      setIsBooking(false);
+    }
   };
 
 
@@ -198,9 +198,9 @@ export default function TripDetailsPage() {
 
       {/* Payment Dialog */}
       <Dialog open={isPaymentDialogOpen} onOpenChange={(open) => {
-        if (isBooking) return; // Prevent closing dialog during booking action from within dialog
+        if (isBooking) return; 
         setIsPaymentDialogOpen(open);
-        if (!open) setCurrentPaymentSelectionInDialog(null); // Reset if closed via X or overlay
+        if (!open) setCurrentPaymentSelectionInDialog(null); 
       }}>
         <DialogContent className="sm:max-w-[425px]" dir="rtl">
           <DialogHeader>
@@ -212,87 +212,79 @@ export default function TripDetailsPage() {
               onValueChange={(value: 'cash' | 'click') => setCurrentPaymentSelectionInDialog(value)}
               className="space-y-3"
             >
-              <div className="flex items-center space-x-2 space-x-reverse p-2 border rounded-md hover:bg-accent/50 transition-colors">
+              <Label htmlFor="r-cash" className="flex items-center space-x-2 space-x-reverse p-3 border rounded-md hover:bg-accent/50 transition-colors cursor-pointer has-[:checked]:bg-primary/10 has-[:checked]:border-primary">
                 <RadioGroupItem value="cash" id="r-cash" />
-                <Label htmlFor="r-cash" className="cursor-pointer flex-1 text-base">كاش</Label>
-              </div>
-              <div className="flex items-center space-x-2 space-x-reverse p-2 border rounded-md hover:bg-accent/50 transition-colors">
+                <DollarSign className="h-5 w-5 text-primary" />
+                <span className="flex-1 text-base">كاش</span>
+              </Label>
+              <Label htmlFor="r-click" className="flex items-center space-x-2 space-x-reverse p-3 border rounded-md hover:bg-accent/50 transition-colors cursor-pointer has-[:checked]:bg-primary/10 has-[:checked]:border-primary">
                 <RadioGroupItem value="click" id="r-click" />
-                <Label htmlFor="r-click" className="cursor-pointer flex-1 text-base">كليك</Label>
-              </div>
+                <Smartphone className="h-5 w-5 text-primary" />
+                <span className="flex-1 text-base">كليك</span>
+              </Label>
             </RadioGroup>
+
+            {currentPaymentSelectionInDialog === 'click' && (
+              <div className="mt-4 space-y-3 border-t pt-4">
+                <h4 className="text-center text-lg font-semibold text-primary">الدفع بواسطة كليك</h4>
+                <p className="text-center text-sm text-muted-foreground">يرجى استخدام الرمز التالي لإتمام عملية الدفع مع السائق:</p>
+                <div className="flex justify-center my-2">
+                  <Image
+                    src="https://placehold.co/150x150.png"
+                    alt="رمز كليك للدفع"
+                    width={150}
+                    height={150}
+                    className="rounded-lg shadow-md border"
+                    data-ai-hint="qr code payment"
+                  />
+                </div>
+                <p className="text-center text-base">
+                  اسم السائق: <span className="font-semibold">{trip?.driver.name}</span>
+                </p>
+              </div>
+            )}
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
             <DialogClose asChild>
-              <Button variant="outline" disabled={isBooking}>إلغاء</Button>
+              <Button variant="outline" disabled={isBooking} onClick={() => setCurrentPaymentSelectionInDialog(null)}>إلغاء</Button>
             </DialogClose>
-            <Button onClick={handleConfirmPaymentChoice} disabled={!currentPaymentSelectionInDialog || isBooking}>
-              {isBooking && currentPaymentSelectionInDialog === 'cash' ? <Loader2 className="ms-2 h-5 w-5 animate-spin" /> : null}
-              تأكيد واختيار الدفع
+            <Button 
+              onClick={handleDialogConfirmAndBook} 
+              disabled={!currentPaymentSelectionInDialog || isBooking}
+            >
+              {isBooking && <Loader2 className="ms-2 h-5 w-5 animate-spin" />}
+              {!currentPaymentSelectionInDialog ? "اختر طريقة أولاً" : 
+               currentPaymentSelectionInDialog === 'cash' ? "تأكيد والدفع كاش" : "لقد دفعت، إتمام الحجز"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Click Payment Info Section */}
-      {finalPaymentMethod === 'click' && !isBooking && (
-        <div className="mt-6 p-6 border rounded-lg shadow-lg bg-card space-y-4">
-          <h3 className="text-xl font-semibold text-center text-primary">الدفع بواسطة كليك</h3>
-          <p className="text-center text-muted-foreground">يرجى استخدام الرمز التالي لإتمام عملية الدفع مع السائق:</p>
-          <div className="flex justify-center my-4">
-            <Image
-              src="https://placehold.co/180x180.png"
-              alt="رمز كليك للدفع"
-              width={180}
-              height={180}
-              className="rounded-lg shadow-md border"
-              data-ai-hint="qr code payment"
-            />
-          </div>
-          <p className="text-center text-lg">
-            اسم السائق: <span className="font-semibold">{trip?.driver.name}</span>
-          </p>
-          <Button 
-            onClick={() => processBooking('click')} 
-            className="w-full p-3 rounded-lg text-base font-semibold mt-4 transition-all duration-300 ease-in-out hover:bg-primary/90 hover:shadow-md active:scale-95"
-            disabled={isBooking || selectedSeats.length === 0}
-          >
-            {isBooking ? <Loader2 className="ms-2 h-5 w-5 animate-spin" /> : <Check className="ms-2 h-5 w-5" />}
-            {isBooking ? "جارِ الإتمام..." : "لقد دفعت، إتمام الحجز"}
-          </Button>
-        </div>
-      )}
-
       {/* Main Action Buttons */}
       <div className="flex flex-col sm:flex-row gap-4 pt-4">
-        {finalPaymentMethod !== 'click' && (
-          <Button 
-            onClick={handleProceedToPayment} 
-            className="flex-1 p-3 rounded-lg text-base font-semibold transition-all duration-300 ease-in-out hover:bg-primary/90 hover:shadow-md active:scale-95"
-            disabled={selectedSeats.length === 0 || isBooking}
-          >
-            {isBooking && finalPaymentMethod !== 'click' ? <Loader2 className="ms-2 h-5 w-5 animate-spin" /> : <Check className="ms-2 h-5 w-5" />}
-            {isBooking && finalPaymentMethod !== 'click' ? "جارِ تأكيد الحجز..." : (selectedSeats.length > 0 ? "تأكيد الحجز والمتابعة للدفع" : "اختر مقعداً أولاً")}
-          </Button>
-        )}
+        <Button 
+          onClick={handleProceedToPayment} 
+          className="flex-1 p-3 rounded-lg text-base font-semibold transition-all duration-300 ease-in-out hover:bg-primary/90 hover:shadow-md active:scale-95"
+          disabled={selectedSeats.length === 0 || isBooking}
+        >
+          <Check className="ms-2 h-5 w-5" />
+          {selectedSeats.length > 0 ? "تأكيد الحجز والمتابعة للدفع" : "اختر مقعداً أولاً"}
+        </Button>
         <Button 
           variant="outline" 
           onClick={() => {
             if (isBooking) return;
-            if (finalPaymentMethod === 'click') {
-              setFinalPaymentMethod(null); 
-              setCurrentPaymentSelectionInDialog(null);
-            } else {
-              router.back();
-            }
+            setCurrentPaymentSelectionInDialog(null); 
+            router.back();
           }}
           className="flex-1 p-3 rounded-lg text-base font-semibold transition-all duration-300 ease-in-out hover:shadow-md active:scale-95"
           disabled={isBooking}
         >
           <ArrowLeft className="ms-2 h-5 w-5" />
-          {finalPaymentMethod === 'click' ? "تغيير طريقة الدفع / رجوع" : "رجوع"}
+          رجوع
         </Button>
       </div>
     </div>
   );
 }
+
