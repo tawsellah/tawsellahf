@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Search, MapPin, Flag, Clock } from 'lucide-react';
@@ -56,7 +57,7 @@ export default function TripSearchPage() {
                   نقطة الانطلاق
                 </FormLabel>
                 <FormControl>
-                  <Input placeholder="مثال: الرياض" {...field} />
+                  <Input placeholder="مثال: عمان" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -73,7 +74,7 @@ export default function TripSearchPage() {
                   نقطة الوصول
                 </FormLabel>
                 <FormControl>
-                  <Input placeholder="مثال: جدة" {...field} />
+                  <Input placeholder="مثال: الزرقاء" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
