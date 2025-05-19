@@ -16,6 +16,7 @@ import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
 import { ref, get, runTransaction } from 'firebase/database';
 import { generateSeatsFromTripData, formatTimeToArabicAMPM, formatDateToArabic } from '@/lib/constants';
+import { cn } from '@/lib/utils'; // Added missing import
 
 const CLICK_PAYMENT_CODE_PLACEHOLDER = "CLK_DRIVER_CODE"; 
 
@@ -200,7 +201,7 @@ export default function TripDetailsPage() {
         let seatsUpdated = false;
 
         if (currentFirebaseTripData.offeredSeatsConfig) {
-          let newOfferedSeatsConfig = { ...currentFirebaseTripData.offeredSeatsConfig };
+          let newOfferedSeatsConfig = { ...(currentFirebaseTripData.offeredSeatsConfig || {}) };
           selectedSeats.forEach(seatId => {
             if (newOfferedSeatsConfig[seatId] === true) { // Check if seat is available (true)
               newOfferedSeatsConfig[seatId] = false; // Mark as taken (false)
@@ -270,7 +271,7 @@ export default function TripDetailsPage() {
 
     } catch (error: any) {
       console.error("Error during booking transaction or UI update:", error);
-      if (error.message === "Trip data not found in transaction.") {
+       if (error.message === "Trip data not found in transaction.") {
         toast({ title: "خطأ في الحجز", description: "لم نتمكن من إكمال الحجز. هذه الرحلة لم تعد متوفرة أو تم حذفها.", variant: "destructive"});
       } else {
         toast({ title: "خطأ في الحجز", description: error.message || "لم نتمكن من إكمال الحجز. قد تكون المقاعد قد حُجزت أو أن الرحلة لم تعد متاحة. الرجاء المحاولة مرة أخرى.", variant: "destructive"});
