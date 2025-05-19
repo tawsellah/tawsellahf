@@ -4,7 +4,7 @@
 import type { Trip } from '@/types';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Star, Car, CalendarDays, Clock, Timer, CircleDollarSign, ArrowLeft, Users } from 'lucide-react'; 
+import { Star, Car, CalendarDays, Clock, CircleDollarSign, ArrowLeft, Users, MapPin } from 'lucide-react'; // Added MapPin
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 
@@ -34,7 +34,7 @@ export function TripCard({ trip }: TripCardProps) {
         <div className="flex items-center justify-between">
            <div className="flex items-center gap-3">
             <Image
-              src={trip.driver.photoUrl}
+              src={trip.driver.photoUrl || `https://placehold.co/40x40.png`}
               alt={`صورة السائق ${trip.driver.name}`}
               width={40}
               height={40}
@@ -70,7 +70,7 @@ export function TripCard({ trip }: TripCardProps) {
         </div>
          <div className="flex items-center gap-2">
           <Users className="h-4 w-4 text-primary" />
-          <span>{availableSeatsCount} مقاعد متاحة</span>
+          <span>{availableSeatsCount} {availableSeatsCount === 1 ? 'مقعد متاح' : availableSeatsCount === 2 ? 'مقعدان متاحان' : 'مقاعد متاحة'}</span>
         </div>
         <div className="flex items-center gap-2 text-orange-600">
           <Clock className="h-4 w-4" />
