@@ -1,8 +1,9 @@
+
 "use client";
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { UserPlus, User, Phone, Lock, Check, ArrowLeft } from 'lucide-react';
+import { UserPlus, User, Phone, Lock, Check, ArrowLeft, Loader2 } from 'lucide-react'; // Added Loader2
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -10,10 +11,13 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
+import { authRider, dbRider } from '@/lib/firebase'; // Use authRider and dbRider
+import { createUserWithEmailAndPassword } from 'firebase/auth'; // Removed FirebaseError
+import { ref, set } from 'firebase/database';
 
 const signUpSchema = z.object({
   fullName: z.string().min(3, "يجب أن يكون الاسم الكامل 3 أحرف على الأقل"),
-  phoneNumber: z.string().regex(/^[0-9]{10}$/, "يجب أن يتكون رقم الهاتف من 10 أرقام"),
+  phoneNumber: z.string().regex(/^[0-9]{10}$/, "يجب أن يتكون رقم الهاتف من 10 أرقام (مثال: 05XXXXXXXX)"),
   password: z.string().min(6, "يجب أن تكون كلمة المرور 6 أحرف على الأقل"),
   confirmPassword: z.string().min(6, "يجب أن تكون كلمة المرور 6 أحرف على الأقل"),
 }).refine(data => data.password === data.confirmPassword, {
@@ -37,19 +41,55 @@ export default function SignUpPage() {
   });
 
   const onSubmit = async (data: SignUpFormData) => {
-    // Placeholder for actual sign-up logic
-    console.log("Sign-up data:", data);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    form.clearErrors();
+    const email = `t${data.phoneNumber}@tawsellah.com`;
 
-    // Simulate successful registration
-    const generatedEmail = `${data.phoneNumber.slice(1)}@tawsellah.app`; // Example email generation
-    toast({
-      title: "تم إنشاء الحساب بنجاح!",
-      description: `بريدك الإلكتروني المسجل هو: ${generatedEmail}`,
-      className: "bg-success text-success-foreground border-green-300"
-    });
-    router.push('/auth/signin'); // Navigate to sign-in page after successful sign-up
+    try {
+      const userCredential = await createUserWithEmailAndPassword(authRider, email, data.password);
+      const user = userCredential.user;
+
+      // Save additional user info to Realtime Database (using dbRider)
+      await set(ref(dbRider, 'users/' + user.uid), {
+        uid: user.uid,
+        fullName: data.fullName,
+        phoneNumber: data.phoneNumber,
+        email: email, // Save the generated email
+        createdAt: Date.now(),
+      });
+
+      toast({
+        title: "تم إنشاء الحساب بنجاح!",
+        description: `أهلاً بك ${data.fullName}. يمكنك الآن تسجيل الدخول.`,
+        className: "bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-200 border-green-300 dark:border-green-600"
+      });
+      router.push('/auth/signin');
+    } catch (error: any) { // Changed error type to any
+      console.error("Error signing up:", error);
+      let errorMessage = "حدث خطأ أثناء إنشاء الحساب. الرجاء المحاولة مرة أخرى.";
+      if (error && typeof error === 'object' && 'code' in error) { // Check for error.code
+        switch (error.code) {
+          case 'auth/email-already-in-use':
+            errorMessage = "هذا البريد الإلكتروني (المشتق من رقم الهاتف) مستخدم بالفعل.";
+            form.setError("phoneNumber", { message: "رقم الهاتف هذا مسجل بالفعل." });
+            break;
+          case 'auth/weak-password':
+            errorMessage = "كلمة المرور ضعيفة جداً. يجب أن تكون 6 أحرف على الأقل.";
+            form.setError("password", { message: errorMessage });
+            break;
+          case 'auth/invalid-email':
+            errorMessage = "صيغة البريد الإلكتروني (المشتقة من رقم الهاتف) غير صالحة.";
+            break;
+          default:
+            errorMessage = `فشل إنشاء الحساب: ${error.message || 'خطأ غير معروف'}`;
+        }
+      }
+      toast({
+        title: "خطأ في إنشاء الحساب",
+        description: errorMessage,
+        variant: "destructive",
+      });
+      form.setError("root", { message: errorMessage });
+    }
   };
 
   return (
@@ -130,7 +170,7 @@ export default function SignUpPage() {
           />
           
           {form.formState.errors.root && (
-             <p className="text-sm font-medium text-destructive">{form.formState.errors.root.message}</p>
+             <p className="text-sm font-medium text-destructive text-center">{form.formState.errors.root.message}</p>
           )}
 
           <div className="flex flex-col sm:flex-row gap-4 pt-2">
@@ -139,7 +179,7 @@ export default function SignUpPage() {
               className="flex-1 p-3 rounded-lg text-base font-semibold transition-all duration-300 ease-in-out hover:bg-primary/90 hover:shadow-md active:scale-95"
               disabled={form.formState.isSubmitting}
             >
-              <Check className="ms-2 h-5 w-5" />
+              {form.formState.isSubmitting ? <Loader2 className="ms-2 h-5 w-5 animate-spin" /> : <Check className="ms-2 h-5 w-5" />}
               {form.formState.isSubmitting ? "جارِ التسجيل..." : "تسجيل"}
             </Button>
             <Button 
@@ -147,6 +187,7 @@ export default function SignUpPage() {
               variant="outline" 
               onClick={() => router.push('/auth/signin')}
               className="flex-1 p-3 rounded-lg text-base font-semibold transition-all duration-300 ease-in-out hover:shadow-md active:scale-95"
+              disabled={form.formState.isSubmitting}
             >
               <ArrowLeft className="ms-2 h-5 w-5" /> 
               رجوع

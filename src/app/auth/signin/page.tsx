@@ -1,8 +1,9 @@
+
 "use client";
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { LogIn, Phone, Lock } from 'lucide-react';
+import { LogIn, Phone, Lock, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -10,9 +11,11 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
+import { authRider } from '@/lib/firebase'; // Use authRider
+import { signInWithEmailAndPassword } from 'firebase/auth'; // Removed FirebaseError
 
 const signInSchema = z.object({
-  phoneNumber: z.string().regex(/^[0-9]{10}$/, "يجب أن يتكون رقم الهاتف من 10 أرقام"),
+  phoneNumber: z.string().regex(/^[0-9]{10}$/, "يجب أن يتكون رقم الهاتف من 10 أرقام (مثال: 05XXXXXXXX)"),
   password: z.string().min(6, "يجب أن تكون كلمة المرور 6 أحرف على الأقل"),
 });
 
@@ -30,22 +33,40 @@ export default function SignInPage() {
   });
 
   const onSubmit = async (data: SignInFormData) => {
-    // Placeholder for actual sign-in logic
-    console.log("Sign-in data:", data);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    form.clearErrors();
+    const email = `t${data.phoneNumber}@tawsellah.com`;
 
-    if (data.phoneNumber === "0500000000" && data.password === "password") {
+    try {
+      await signInWithEmailAndPassword(authRider, email, data.password);
       toast({
         title: "تم تسجيل الدخول بنجاح!",
         description: "أهلاً بك مجدداً.",
-        className: "bg-success text-success-foreground border-green-300"
+        className: "bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-200 border-green-300 dark:border-green-600"
       });
       router.push('/'); // Navigate to main page on successful sign-in
-    } else {
+    } catch (error: any) { // Changed error type to any
+      console.error("Error signing in:", error);
+      let errorMessage = "فشل تسجيل الدخول. الرجاء التحقق من المعلومات والمحاولة مرة أخرى.";
+      if (error && typeof error === 'object' && 'code' in error) { // Check for error.code
+        switch (error.code) {
+          case 'auth/user-not-found':
+          case 'auth/wrong-password':
+          case 'auth/invalid-credential': // Covers both wrong password and user not found in newer SDK versions
+            errorMessage = "رقم الهاتف أو كلمة المرور غير صحيحة.";
+            break;
+          case 'auth/invalid-email':
+            errorMessage = "صيغة البريد الإلكتروني (المشتقة من رقم الهاتف) غير صالحة. تأكد من إدخال رقم هاتف صحيح.";
+            break;
+          case 'auth/too-many-requests':
+            errorMessage = "تم حظر الوصول مؤقتًا بسبب عدد كبير جدًا من محاولات تسجيل الدخول الفاشلة. يرجى المحاولة مرة أخرى لاحقًا.";
+            break;
+          default:
+            errorMessage = `فشل تسجيل الدخول: ${error.message || 'خطأ غير معروف'}`;
+        }
+      }
       toast({
         title: "خطأ في تسجيل الدخول",
-        description: "رقم الهاتف أو كلمة المرور غير صحيحة.",
+        description: errorMessage,
         variant: "destructive",
       });
       form.setError("root", { message: "رقم الهاتف أو كلمة المرور غير صحيحة."});
@@ -96,7 +117,7 @@ export default function SignInPage() {
           />
           
           {form.formState.errors.root && (
-             <p className="text-sm font-medium text-destructive">{form.formState.errors.root.message}</p>
+             <p className="text-sm font-medium text-destructive text-center">{form.formState.errors.root.message}</p>
           )}
 
           <Button 
@@ -104,7 +125,7 @@ export default function SignInPage() {
             className="w-full p-3 rounded-lg text-base font-semibold transition-all duration-300 ease-in-out hover:bg-primary/90 hover:shadow-md active:scale-95"
             disabled={form.formState.isSubmitting}
           >
-            <LogIn className="ms-2 h-5 w-5" />
+            {form.formState.isSubmitting ? <Loader2 className="ms-2 h-5 w-5 animate-spin" /> : <LogIn className="ms-2 h-5 w-5" />}
             {form.formState.isSubmitting ? "جارِ الدخول..." : "دخول"}
           </Button>
         </form>

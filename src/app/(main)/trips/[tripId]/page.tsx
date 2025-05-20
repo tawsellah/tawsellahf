@@ -11,9 +11,9 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
-import { CheckCircle, XCircle, Info, Armchair, Check, ArrowLeft, Loader2, DollarSign, Smartphone, Copy, MapPin } from 'lucide-react';
+import { CheckCircle, XCircle, Info, Armchair, Check, ArrowLeft, Loader2, DollarSign, Smartphone, Copy, MapPin, LogIn } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { db } from '@/lib/firebase';
+import { dbPrimary, authRider } from '@/lib/firebase'; // Use dbPrimary for trips, authRider for user state
 import { ref, get, runTransaction } from 'firebase/database';
 import { generateSeatsFromTripData, formatTimeToArabicAMPM, formatDateToArabic } from '@/lib/constants';
 import { cn } from '@/lib/utils';
@@ -38,8 +38,8 @@ export default function TripDetailsPage() {
   const fetchTripDetails = useCallback(async () => {
     setIsLoading(true);
     setTrip(null); 
-    setSelectedSeats([]); // Reset selected seats when fetching new trip details
-    setCurrentPaymentSelectionInDialog(null); // Reset payment selection
+    setSelectedSeats([]); 
+    setCurrentPaymentSelectionInDialog(null);
     if (!tripIdFromParams) {
         toast({ title: "خطأ", description: "معرّف الرحلة غير موجود.", variant: "destructive" });
         setIsLoading(false);
@@ -47,13 +47,20 @@ export default function TripDetailsPage() {
         return;
     }
     try {
-      const tripRef = ref(db, `currentTrips/${tripIdFromParams}`);
+      // Fetch trip data from primary DB (tawsellah3)
+      const tripRef = ref(dbPrimary, `currentTrips/${tripIdFromParams}`);
       const tripSnapshot = await get(tripRef);
 
       if (tripSnapshot.exists()) {
         const fbTrip = tripSnapshot.val() as FirebaseTripType;
         
-        const driverSnapshot = await get(ref(db, `users/${fbTrip.driverId}`));
+        // Fetch driver data - assuming driver profiles might be in primary DB or rider DB.
+        // For now, let's assume driver user profiles are in the primary DB (tawsellah3) under 'users' path.
+        // If driver profiles are in dbRider, this ref should use dbRider.
+        // This part needs clarification based on where driver (FirebaseUser) profiles are stored.
+        // For this example, I'll assume they are in dbPrimary for consistency with how currentTrips are structured.
+        const driverSnapshot = await get(ref(dbPrimary, `users/${fbTrip.driverId}`));
+        
         if (driverSnapshot.exists()) {
           const driverData = driverSnapshot.val() as FirebaseUser;
           const processedSeats = generateSeatsFromTripData(fbTrip);
@@ -140,6 +147,22 @@ export default function TripDetailsPage() {
   }, [selectedSeats, isBooking]);
 
   const handleProceedToPayment = () => {
+    const currentUser = authRider.currentUser;
+    if (!currentUser) {
+      toast({
+        title: "يرجى تسجيل الدخول",
+        description: "يجب عليك تسجيل الدخول أولاً لتتمكن من حجز رحلة.",
+        variant: "destructive",
+        action: (
+          <Button onClick={() => router.push('/auth/signin')} variant="outline" size="sm">
+            <LogIn className="ms-1 h-4 w-4" />
+            تسجيل الدخول
+          </Button>
+        )
+      });
+      return;
+    }
+
     if (selectedSeats.length === 0) {
       toast({ title: "خطأ", description: 'الرجاء اختيار مقعد واحد على الأقل.', variant: "destructive" });
       return;
@@ -181,20 +204,21 @@ export default function TripDetailsPage() {
       await processBooking(currentPaymentSelectionInDialog);
     } catch (error) {
       console.error("Booking failed in handleDialogConfirmAndBook:", error);
+      // Error toast is handled within processBooking
     }
   };
 
   const processBooking = async (paymentType: 'cash' | 'click') => {
-    if (selectedSeats.length === 0 || !trip || !trip.id) {
-       toast({ title: "خطأ", description: 'الرجاء اختيار مقعد واحد على الأقل أو الرحلة غير متوفرة.', variant: "destructive" });
-       return; // No need to set isBooking false as it's not true yet
+    if (!trip || !trip.id || selectedSeats.length === 0) {
+      toast({ title: "خطأ", description: 'الرجاء اختيار مقعد واحد على الأقل أو الرحلة غير متوفرة.', variant: "destructive" });
+      return;
     }
 
-    const currentTripId = trip.id;
     setIsBooking(true); 
+    const currentTripId = trip.id;
     
     try {
-      const tripRef = ref(db, `currentTrips/${currentTripId}`);
+      const tripRef = ref(dbPrimary, `currentTrips/${currentTripId}`); // Use dbPrimary for trip data
       
       await runTransaction(tripRef, (currentFirebaseTripData: FirebaseTripType | null): FirebaseTripType | undefined => {
         if (!currentFirebaseTripData) {
@@ -232,9 +256,12 @@ export default function TripDetailsPage() {
             throw new Error("لم يتم العثور على تكوين المقاعد لهذه الرحلة.");
         }
         
-        if (!seatsUpdated && selectedSeats.length > 0) { // Should not happen if above logic is correct
+        if (!seatsUpdated && selectedSeats.length > 0) { 
              throw new Error("لم يتم تحديث المقاعد المختارة في قاعدة البيانات (قد تكون محجوزة أو غير صالحة).");
         }
+        // Here you might want to record the booking itself, e.g., in a 'bookings' node.
+        // This would involve adding a new entry with tripId, userId (from authRider.currentUser.uid), selectedSeats, paymentType etc.
+        // For now, only updating trip seat availability as per previous logic.
         
         return currentFirebaseTripData;
       });
@@ -274,23 +301,26 @@ export default function TripDetailsPage() {
       router.push('/'); 
 
     } catch (error: any) {
+      let handled = false;
       if (error.message === "Trip data not found in transaction.") {
-        console.warn(`HANDLED: Booking failed because trip data for ID '${currentTripId}' was not found during transaction. This usually means the trip was deleted or the ID is incorrect.`);
+        console.warn(`HANDLED (processBooking): Booking failed because trip data for ID '${currentTripId}' was not found during transaction. This usually means the trip was deleted or the ID is incorrect.`);
         toast({ title: "خطأ في الحجز", description: "لم نتمكن من إكمال الحجز. هذه الرحلة لم تعد متوفرة أو تم حذفها.", variant: "destructive"});
+        handled = true;
       } else if (error.message.startsWith("المقعد") || error.message.startsWith("واحد أو أكثر") || error.message.startsWith("هذه الرحلة لم تعد متاحة") || error.message.startsWith("لم يتم العثور على تكوين المقاعد")) {
-        console.warn(`HANDLED: Booking failed due to seat/trip status issue: ${error.message}`);
+        console.warn(`HANDLED (processBooking): Booking failed due to seat/trip status issue: ${error.message}`);
         toast({ title: "خطأ في الحجز", description: error.message, variant: "destructive"});
-      } else {
+        handled = true;
+      }
+      
+      if (!handled) {
         console.error("UNHANDLED error in processBooking:", error);
         toast({ title: "خطأ في الحجز", description: "لم نتمكن من إكمال الحجز. قد تكون المقاعد قد حُجزت أو أن الرحلة لم تعد متاحة. الرجاء المحاولة مرة أخرى.", variant: "destructive"});
       }
       
       try {
-        await fetchTripDetails(); // Attempt to refresh trip details to reflect the latest state
+        await fetchTripDetails(); 
       } catch (fetchError) {
         console.error("Error refetching trip details after booking failure:", fetchError);
-        // If refetch fails, the user might be stuck or see inconsistent state.
-        // Depending on the error, might want to redirect or show a more permanent error.
       }
     } finally {
         setIsBooking(false);
