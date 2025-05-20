@@ -198,6 +198,8 @@ export default function TripDetailsPage() {
     try {
       await processBooking(currentPaymentSelectionInDialog);
     } catch (error) {
+      // Errors from processBooking are handled within it, including toasts
+      // This catch is a fallback, but ideally, processBooking's catch handles user-facing errors
       console.error("Booking failed in handleDialogConfirmAndBook wrapper:", error);
     }
   };
@@ -212,7 +214,7 @@ export default function TripDetailsPage() {
       toast({ title: "خطأ", description: 'الرجاء اختيار مقعد واحد على الأقل أو الرحلة غير متوفرة.', variant: "destructive" });
       return;
     }
-
+    
     setIsBooking(true); 
     const currentTripId = trip.id; 
     
@@ -221,12 +223,12 @@ export default function TripDetailsPage() {
     try {
         const userRef = ref(dbRider, `users/${userId}`);
         const userSnapshot = await get(userRef);
-        if (!userSnapshot.exists() || !userSnapshot.val().phoneNumber) { // Changed from .phone to .phoneNumber
+        if (!userSnapshot.exists() || !userSnapshot.val().phoneNumber) {
             toast({ title: "خطأ في الحجز", description: "لم يتم العثور على بيانات المستخدم أو رقم الهاتف.", variant: "destructive" });
             setIsBooking(false);
             return;
         }
-        userPhoneNumber = userSnapshot.val().phoneNumber as string; // Changed from .phone to .phoneNumber
+        userPhoneNumber = userSnapshot.val().phoneNumber as string;
     } catch (error) {
         console.error("Error fetching user phone number:", error);
         toast({ title: "خطأ في الحجز", description: "خطأ في جلب بيانات المستخدم.", variant: "destructive" });
@@ -234,10 +236,10 @@ export default function TripDetailsPage() {
         return;
     }
 
+    const tripRef = ref(dbPrimary, `currentTrips/${currentTripId}`);
+    const bookingDetails = { userId, phone: userPhoneNumber, bookedAt: Date.now() };
+
     try {
-      const tripRef = ref(dbPrimary, `currentTrips/${currentTripId}`);
-      const bookingDetails = { userId, phone: userPhoneNumber, bookedAt: Date.now() };
-      
       await runTransaction(tripRef, (currentFirebaseTripData: FirebaseTripType | null): FirebaseTripType | undefined => {
         if (!currentFirebaseTripData) {
           throw new Error("Trip data not found in transaction.");
@@ -246,14 +248,15 @@ export default function TripDetailsPage() {
         if (currentFirebaseTripData.status !== 'upcoming') {
             throw new Error("هذه الرحلة لم تعد متاحة للحجز (حالتها ليست 'upcoming').");
         }
-
+        
         let seatsUpdated = false;
+        const newPassengerDetails = { ...(currentFirebaseTripData.passengerDetails || {}) };
         
         if (currentFirebaseTripData.offeredSeatsConfig) {
           let newOfferedSeatsConfig = { ...(currentFirebaseTripData.offeredSeatsConfig || {}) };
           selectedSeats.forEach(seatId => {
             if (newOfferedSeatsConfig.hasOwnProperty(seatId) && newOfferedSeatsConfig[seatId] === true) { 
-              newOfferedSeatsConfig[seatId] = bookingDetails;
+              newOfferedSeatsConfig[seatId] = bookingDetails; // Store booking details directly
               seatsUpdated = true;
             } else {
               throw new Error(`المقعد ${seatId} غير متاح أو تم حجزه بالفعل.`);
@@ -271,12 +274,10 @@ export default function TripDetailsPage() {
            }
            currentFirebaseTripData.offeredSeatIds = newOfferedSeatIds;
            
-           if (!currentFirebaseTripData.passengerDetails) {
-             currentFirebaseTripData.passengerDetails = {};
-           }
            selectedSeats.forEach(seatId => {
-             currentFirebaseTripData.passengerDetails![seatId] = bookingDetails;
+             newPassengerDetails[seatId] = bookingDetails;
            });
+           currentFirebaseTripData.passengerDetails = newPassengerDetails;
            seatsUpdated = true;
         } else {
             throw new Error("لم يتم العثور على تكوين المقاعد لهذه الرحلة.");
@@ -313,7 +314,9 @@ export default function TripDetailsPage() {
                 updatedFirebaseTripDataForUi.passengerDetails = {};
             }
             selectedSeats.forEach(seatId => {
-                updatedFirebaseTripDataForUi.passengerDetails![seatId] = bookingDetailsForUi;
+                 if(updatedFirebaseTripDataForUi.passengerDetails) { // Ensure passengerDetails exists
+                    updatedFirebaseTripDataForUi.passengerDetails[seatId] = bookingDetailsForUi;
+                 }
             });
         }
 
@@ -333,15 +336,15 @@ export default function TripDetailsPage() {
 
     } catch (error: any) {
       let handled = false;
-      const errorMessage = error.message || "خطأ غير معروف";
+      const errorMessage = error?.message || "خطأ غير معروف";
       
-      console.error("Error in processBooking:", {
-        message: errorMessage,
-        tripId: currentTripId,
-        selectedSeats,
-        isTransactionError: errorMessage.includes("Trip data not found in transaction"),
-        rawError: error
-      });
+      console.error(
+        "Error in processBooking - Message:", errorMessage, 
+        "Raw Error:", error, 
+        "TripId:", currentTripId, 
+        "Selected Seats:", selectedSeats,
+        "User ID:", userId 
+      );
 
       if (errorMessage === "Trip data not found in transaction.") {
         toast({ title: "خطأ في الحجز", description: "لم نتمكن من إكمال الحجز. هذه الرحلة لم تعد متوفرة أو تم حذفها.", variant: "destructive"});
@@ -530,6 +533,6 @@ export default function TripDetailsPage() {
     </div>
   );
 }
-
+    
 
     
