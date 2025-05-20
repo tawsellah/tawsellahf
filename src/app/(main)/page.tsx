@@ -40,7 +40,7 @@ export default function TripSearchPage() {
   const onSubmit = async (data: SearchFormData) => {
     form.clearErrors();
     setSearchResults([]);
-    form.setValue('departureTime', data.departureTime);
+    form.setValue('departureTime', data.departureTime); // Ensure form state is updated for display if needed
 
     try {
       const tripsRef = ref(dbPrimary, 'currentTrips'); 
@@ -48,18 +48,25 @@ export default function TripSearchPage() {
 
       if (snapshot.exists()) {
         const allTripsData = snapshot.val() as Record<string, FirebaseTrip>;
+        
+        // Convert form departure time to a Date object for comparison
+        // The input type="datetime-local" provides value in "YYYY-MM-DDTHH:mm" format
         const formDepartureDateTime = new Date(data.departureTime);
 
         const matchedFirebaseTrips: FirebaseTrip[] = [];
 
         for (const tripId in allTripsData) {
           const fbTrip = allTripsData[tripId];
+          // Ensure fbTrip.startPoint and fbTrip.destination are compared in a consistent case (e.g., lowercased)
+          // with data.startPoint and data.endPoint if they can have case variations.
+          // Assuming values from dropdown (data.startPoint, data.endPoint) are already consistent (e.g., lowercase).
           if (fbTrip.startPoint?.toLowerCase() === data.startPoint.toLowerCase() &&
               fbTrip.destination?.toLowerCase() === data.endPoint.toLowerCase() &&
-              fbTrip.status === 'upcoming') {
+              fbTrip.status === 'upcoming') { // Only match upcoming trips
             
-            const tripDepartureDateTime = new Date(fbTrip.dateTime);
+            const tripDepartureDateTime = new Date(fbTrip.dateTime); // Firebase dateTime is ISO string
             
+            // Compare year, month, day, hours, and minutes
             if (tripDepartureDateTime.getFullYear() === formDepartureDateTime.getFullYear() &&
                 tripDepartureDateTime.getMonth() === formDepartureDateTime.getMonth() &&
                 tripDepartureDateTime.getDate() === formDepartureDateTime.getDate() &&
@@ -81,16 +88,17 @@ export default function TripSearchPage() {
                 id: fbTrip.id,
                 firebaseTripData: fbTrip,
                 driver: {
-                  id: driverData.id || fbTrip.driverId,
+                  id: driverData.id || fbTrip.driverId, // Fallback to driverId from trip if not in user data
                   name: driverData.fullName || "اسم غير متوفر",
                   rating: driverData.rating || 0,
                   photoUrl: driverData.idPhotoUrl || driverData.vehiclePhotosUrl || `https://placehold.co/100x100.png?text=${driverData.fullName?.charAt(0) || 'D'}`,
                   carNumber: driverData.vehiclePlateNumber || "غير متوفر",
                   carModel: driverData.vehicleMakeModel || "غير متوفر",
-                  carColor: driverData.vehicleColor || "#FFFFFF",
-                  carColorName: driverData.vehicleColor, 
+                  carColor: driverData.vehicleColor || "#FFFFFF", // Default to white if no color
+                  carColorName: driverData.vehicleColor, // Assuming vehicleColor can be a name or hex
                   clickCode: driverData.paymentMethods?.clickCode
                 },
+                // Car details (can be derived from driverData as well)
                 car: { 
                   name: driverData.vehicleMakeModel || "غير متوفر",
                   color: driverData.vehicleColor || "#FFFFFF",
@@ -98,23 +106,26 @@ export default function TripSearchPage() {
                 },
                 date: formatDateToArabic(fbTrip.dateTime),
                 departureTime: formatTimeToArabicAMPM(fbTrip.dateTime),
-                arrivalTime: fbTrip.expectedArrivalTime || "غير محدد",
+                arrivalTime: fbTrip.expectedArrivalTime || "غير محدد", // Handle undefined expectedArrivalTime
                 price: fbTrip.pricePerPassenger,
                 startPoint: fbTrip.startPoint,
                 endPoint: fbTrip.destination,
                 meetingPoint: fbTrip.meetingPoint,
                 notes: fbTrip.notes,
                 status: fbTrip.status,
-                seats: generateSeatsFromTripData(fbTrip),
+                seats: generateSeatsFromTripData(fbTrip), // Generate seats based on config
               });
             } else {
+              // Handle case where driver data might not be found or is incomplete
               console.warn(`Driver data not found for driverId: ${fbTrip.driverId} in tawsellah3. User might be in tawsellah-rider or data is missing.`);
+              // Optionally, you could create a placeholder driver or skip this trip
             }
           }
           setSearchResults(enrichedTrips);
           if (enrichedTrips.length > 0) {
             toast({ title: "تم العثور على رحلات", description: `تم العثور على ${enrichedTrips.length} رحلة مطابقة.` });
           } else {
+             // This case might occur if matchedFirebaseTrips had trips, but driver data was missing for all.
              toast({ title: "لا توجد رحلات", description: "لم يتم العثور على رحلات تطابق معايير البحث (مع مراعاة السائقين).", variant: "default" });
           }
         } else {
@@ -155,7 +166,7 @@ export default function TripSearchPage() {
                   </FormControl>
                   <SelectContent>
                     {jordanianGovernorates.map(gov => (
-                      <SelectItem key={gov.value} value={gov.value}>{gov.displayNameAr}</SelectItem>
+                      <SelectItem key={`start-${gov.value}`} value={gov.value}>{gov.displayNameAr}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -181,7 +192,7 @@ export default function TripSearchPage() {
                   </FormControl>
                   <SelectContent>
                     {jordanianGovernorates.map(gov => (
-                      <SelectItem key={gov.value} value={gov.value}>{gov.displayNameAr}</SelectItem>
+                      <SelectItem key={`end-${gov.value}`} value={gov.value}>{gov.displayNameAr}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -200,6 +211,7 @@ export default function TripSearchPage() {
                   وقت وتاريخ الانطلاق
                 </FormLabel>
                 <FormControl>
+                  {/* Using datetime-local for combined date and time input */}
                   <Input type="datetime-local" {...field} />
                 </FormControl>
                 <FormMessage />
@@ -217,6 +229,7 @@ export default function TripSearchPage() {
       {searchResults.length > 0 && (
         <div className="space-y-4">
           <h2 className="text-2xl font-semibold text-center">نتائج البحث</h2>
+          {/* Made the results scrollable if they exceed a certain height */}
           <div className="max-h-[400px] space-y-4 overflow-y-auto rounded-lg p-1">
             {searchResults.map((trip) => (
               <TripCard key={trip.id} trip={trip} />
@@ -227,3 +240,4 @@ export default function TripSearchPage() {
     </div>
   );
 }
+
