@@ -85,28 +85,38 @@ export function generateSeatsFromTripData(tripData: FirebaseTrip): Seat[] {
 
   if (tripData.offeredSeatsConfig) {
     passengerSeatLayouts.forEach(layoutSeat => {
-      const seatState = tripData.offeredSeatsConfig![layoutSeat.id];
+      const seatBookingInfo = tripData.offeredSeatsConfig![layoutSeat.id];
       let currentStatus: SeatStatus = 'taken'; // Default if seatId not in config or value is not true
+      let bookedByDetails;
 
-      if (seatState === true) {
+      if (seatBookingInfo === true) {
         currentStatus = 'available';
-      } else if (typeof seatState === 'string' || seatState === false) {
-        // string (userId) or false means taken
+      } else if (typeof seatBookingInfo === 'object' && seatBookingInfo !== null) {
+        // It's an object, meaning it's booked.
         currentStatus = 'taken';
+        bookedByDetails = { userId: seatBookingInfo.userId, phone: seatBookingInfo.phone };
       }
+      // If seatBookingInfo is `false` (legacy or explicitly not offered), it's also 'taken' by default.
       
       seats.push({
         ...layoutSeat,
         status: currentStatus,
+        bookedBy: bookedByDetails,
       });
     });
   } else if (tripData.offeredSeatIds) {
     // If using offeredSeatIds, status is 'available' if ID is in the array, otherwise 'taken'.
-    // The passengerDetails map would store who booked, but for status, this is sufficient.
     passengerSeatLayouts.forEach(layoutSeat => {
+      const isAvailable = tripData.offeredSeatIds!.includes(layoutSeat.id);
+      let bookedByDetails;
+      if (!isAvailable && tripData.passengerDetails && tripData.passengerDetails[layoutSeat.id]) {
+          const details = tripData.passengerDetails[layoutSeat.id];
+          bookedByDetails = { userId: details.userId, phone: details.phone };
+      }
       seats.push({
         ...layoutSeat,
-        status: tripData.offeredSeatIds!.includes(layoutSeat.id) ? 'available' : 'taken',
+        status: isAvailable ? 'available' : 'taken',
+        bookedBy: bookedByDetails,
       });
     });
   } else {

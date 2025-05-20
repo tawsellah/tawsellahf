@@ -54,10 +54,10 @@ export default function TripDetailsPage() {
       if (tripSnapshot.exists()) {
         const fbTrip = tripSnapshot.val() as FirebaseTripType;
         
-        const driverSnapshot = await get(ref(dbPrimary, `users/${fbTrip.driverId}`)); // Assuming driver profiles are in dbPrimary
+        const driverSnapshot = await get(ref(dbPrimary, `users/${fbTrip.driverId}`)); 
         
         if (driverSnapshot.exists()) {
-          const driverData = driverSnapshot.val() as FirebaseUser; // Assuming driver user type is FirebaseUser
+          const driverData = driverSnapshot.val() as FirebaseUser; 
           const processedSeats = generateSeatsFromTripData(fbTrip);
           
           const enrichedTrip: Trip = {
@@ -198,7 +198,9 @@ export default function TripDetailsPage() {
     try {
       await processBooking(currentPaymentSelectionInDialog);
     } catch (error) {
-      console.error("Booking failed in handleDialogConfirmAndBook:", error);
+      // Errors from processBooking (like user not found, trip gone) are handled with toasts there.
+      // This console.error is for unexpected errors during the call itself.
+      console.error("Booking failed in handleDialogConfirmAndBook wrapper:", error);
     }
   };
 
@@ -208,7 +210,7 @@ export default function TripDetailsPage() {
       toast({ title: "خطأ في الحجز", description: "المستخدم غير مسجل الدخول.", variant: "destructive" });
       return;
     }
-     if (!trip || selectedSeats.length === 0) {
+    if (!trip || selectedSeats.length === 0) {
       toast({ title: "خطأ", description: 'الرجاء اختيار مقعد واحد على الأقل أو الرحلة غير متوفرة.', variant: "destructive" });
       return;
     }
@@ -217,8 +219,9 @@ export default function TripDetailsPage() {
     const currentTripId = trip.id;
     
     let userPhoneNumber = '';
+    let userId = currentUser.uid;
     try {
-        const userRef = ref(dbRider, `users/${currentUser.uid}`);
+        const userRef = ref(dbRider, `users/${userId}`);
         const userSnapshot = await get(userRef);
         if (!userSnapshot.exists() || !userSnapshot.val().phone) {
             toast({ title: "خطأ في الحجز", description: "لم يتم العثور على بيانات المستخدم أو رقم الهاتف.", variant: "destructive" });
@@ -233,7 +236,6 @@ export default function TripDetailsPage() {
         return;
     }
 
-
     try {
       const tripRef = ref(dbPrimary, `currentTrips/${currentTripId}`);
       
@@ -247,12 +249,13 @@ export default function TripDetailsPage() {
         }
 
         let seatsUpdated = false;
+        const bookingDetails = { userId, phone: userPhoneNumber, bookedAt: Date.now() };
 
         if (currentFirebaseTripData.offeredSeatsConfig) {
           let newOfferedSeatsConfig = { ...(currentFirebaseTripData.offeredSeatsConfig || {}) };
           selectedSeats.forEach(seatId => {
             if (newOfferedSeatsConfig.hasOwnProperty(seatId) && newOfferedSeatsConfig[seatId] === true) { 
-              newOfferedSeatsConfig[seatId] = currentUser.uid; // Store user UID
+              newOfferedSeatsConfig[seatId] = bookingDetails;
               seatsUpdated = true;
             } else {
               throw new Error(`المقعد ${seatId} غير متاح أو تم حجزه بالفعل.`);
@@ -270,16 +273,11 @@ export default function TripDetailsPage() {
            }
            currentFirebaseTripData.offeredSeatIds = newOfferedSeatIds;
            
-           // Add to passengerDetails map
            if (!currentFirebaseTripData.passengerDetails) {
              currentFirebaseTripData.passengerDetails = {};
            }
            selectedSeats.forEach(seatId => {
-             currentFirebaseTripData.passengerDetails![seatId] = {
-               userId: currentUser.uid,
-               phone: userPhoneNumber, // Storing phone here for this structure
-               bookedAt: Date.now()
-             };
+             currentFirebaseTripData.passengerDetails![seatId] = bookingDetails;
            });
            seatsUpdated = true;
         } else {
@@ -295,33 +293,30 @@ export default function TripDetailsPage() {
       
       // Update UI state
       const updatedUiSeats = trip.seats.map(seat => 
-        selectedSeats.includes(seat.id) ? { ...seat, status: 'taken' as SeatType['status'] } : seat
+        selectedSeats.includes(seat.id) ? { ...seat, status: 'taken' as SeatType['status'], bookedBy: { userId, phone: userPhoneNumber } } : seat
       );
       
       setTrip(currentTripUiState => {
         if (!currentTripUiState) return null;
         
         let updatedFirebaseTripDataForUi = { ...currentTripUiState.firebaseTripData };
+        const bookingDetailsForUi = { userId, phone: userPhoneNumber, bookedAt: Date.now() };
+
         if (updatedFirebaseTripDataForUi.offeredSeatsConfig) {
             const newConfig = {...updatedFirebaseTripDataForUi.offeredSeatsConfig};
             selectedSeats.forEach(seatId => {
                 if (newConfig.hasOwnProperty(seatId)) {
-                    newConfig[seatId] = currentUser.uid; // Reflect UID in UI's copy of trip data
+                    newConfig[seatId] = bookingDetailsForUi;
                 }
             });
             updatedFirebaseTripDataForUi.offeredSeatsConfig = newConfig;
         } else if (updatedFirebaseTripDataForUi.offeredSeatIds) {
             updatedFirebaseTripDataForUi.offeredSeatIds = updatedFirebaseTripDataForUi.offeredSeatIds.filter(id => !selectedSeats.includes(id));
-            // Also update passengerDetails in UI copy if needed for immediate reflection
             if (!updatedFirebaseTripDataForUi.passengerDetails) {
                 updatedFirebaseTripDataForUi.passengerDetails = {};
             }
             selectedSeats.forEach(seatId => {
-                updatedFirebaseTripDataForUi.passengerDetails![seatId] = {
-                    userId: currentUser.uid,
-                    phone: userPhoneNumber,
-                    bookedAt: Date.now()
-                };
+                updatedFirebaseTripDataForUi.passengerDetails![seatId] = bookingDetailsForUi;
             });
         }
 
@@ -342,18 +337,25 @@ export default function TripDetailsPage() {
     } catch (error: any) {
       let handled = false;
       const errorMessage = error.message || "خطأ غير معروف";
+      
+      console.error("Error in processBooking:", {
+        message: errorMessage,
+        tripId: currentTripId,
+        selectedSeats,
+        isTransactionError: errorMessage.includes("Trip data not found in transaction"),
+        rawError: error
+      });
+
+
       if (errorMessage.includes("Trip data not found in transaction")) {
-        console.warn(`HANDLED (processBooking): Booking failed because trip data for ID '${currentTripId}' was not found during transaction. This usually means the trip was deleted or the ID is incorrect.`);
         toast({ title: "خطأ في الحجز", description: "لم نتمكن من إكمال الحجز. هذه الرحلة لم تعد متوفرة أو تم حذفها.", variant: "destructive"});
         handled = true;
       } else if (errorMessage.startsWith("المقعد") || errorMessage.startsWith("واحد أو أكثر") || errorMessage.startsWith("هذه الرحلة لم تعد متاحة") || errorMessage.startsWith("لم يتم العثور على تكوين المقاعد")) {
-        console.warn(`HANDLED (processBooking): Booking failed due to seat/trip status issue: ${errorMessage}`);
         toast({ title: "خطأ في الحجز", description: errorMessage, variant: "destructive"});
         handled = true;
       }
       
       if (!handled) {
-        console.error("UNHANDLED error in processBooking:", error);
         toast({ title: "خطأ في الحجز", description: "لم نتمكن من إكمال الحجز. قد تكون المقاعد قد حُجزت أو أن الرحلة لم تعد متاحة. الرجاء المحاولة مرة أخرى.", variant: "destructive"});
       }
       
@@ -449,12 +451,12 @@ export default function TripDetailsPage() {
               onValueChange={(value: 'cash' | 'click') => setCurrentPaymentSelectionInDialog(value)}
               className="space-y-3"
             >
-              <Label htmlFor="r-cash" className={cn("flex items-center space-x-2 space-x-reverse p-3 border rounded-md hover:bg-accent/50 transition-colors cursor-pointer", currentPaymentSelectionInDialog === 'cash' ? "bg-green-500 text-white border-green-600 dark:bg-green-600 dark:border-green-700" : "border-border")}>
+              <Label htmlFor="r-cash" className={cn("flex items-center space-x-2 space-x-reverse p-3 border rounded-md hover:bg-accent/50 transition-colors cursor-pointer", currentPaymentSelectionInDialog === 'cash' ? "bg-seat-selected text-seat-selected-foreground border-seat-selected/70" : "border-border")}>
                 <RadioGroupItem value="cash" id="r-cash" />
                 <DollarSign className="h-5 w-5 text-primary" />
                 <span className="flex-1 text-base">كاش</span>
               </Label>
-              <Label htmlFor="r-click" className={cn("flex items-center space-x-2 space-x-reverse p-3 border rounded-md hover:bg-accent/50 transition-colors cursor-pointer", currentPaymentSelectionInDialog === 'click' ? "bg-green-500 text-white border-green-600 dark:bg-green-600 dark:border-green-700" : "border-border")}>
+              <Label htmlFor="r-click" className={cn("flex items-center space-x-2 space-x-reverse p-3 border rounded-md hover:bg-accent/50 transition-colors cursor-pointer", currentPaymentSelectionInDialog === 'click' ? "bg-seat-selected text-seat-selected-foreground border-seat-selected/70" : "border-border")}>
                 <RadioGroupItem value="click" id="r-click" />
                 <Smartphone className="h-5 w-5 text-primary" />
                 <span className="flex-1 text-base">كليك</span>

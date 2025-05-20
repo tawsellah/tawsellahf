@@ -9,8 +9,9 @@ export interface FirebaseTrip {
   meetingPoint?: string;
   notes?: string;
   offeredSeatIds?: string[]; // e.g., ["front_passenger"] - if this is used, passengerDetails map will store who booked.
-  offeredSeatsConfig?: { // e.g., { "back_left": false, "back_middle": true, ... } or { "back_middle": "userId123" }
-    [seatId: string]: boolean | string; // true if available, userId string if booked, false for legacy booked.
+  offeredSeatsConfig?: { 
+    // true if available, object with booking details if booked.
+    [seatId: string]: boolean | { userId: string; phone: string; bookedAt: number };
   };
   pricePerPassenger: number;
   startPoint: string;
@@ -21,8 +22,8 @@ export interface FirebaseTrip {
   passengerDetails?: {
     [seatId: string]: {
       userId: string;
-      phone: string; // Storing phone directly here for convenience if needed, though can be fetched from user profile via userId
-      bookedAt?: number; // Optional: timestamp of booking
+      phone: string; // Storing phone directly here
+      bookedAt: number; 
     };
   };
 }
@@ -96,4 +97,7 @@ export interface Seat {
   row: 'front' | 'rear' | 'driver'; 
   position: number; 
   price?: number; 
+  // Optional: if you want to store who booked the seat in the UI Seat object
+  bookedBy?: { userId: string; phone: string };
 }
+
