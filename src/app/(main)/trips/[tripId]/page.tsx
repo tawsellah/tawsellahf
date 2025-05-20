@@ -13,7 +13,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { CheckCircle, XCircle, Info, Armchair, Check, ArrowLeft, Loader2, DollarSign, Smartphone, Copy, MapPin, LogIn } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { dbPrimary, authRider } from '@/lib/firebase'; // Use dbPrimary for trips, authRider for user state
+import { dbPrimary, authRider, dbRider } from '@/lib/firebase'; 
 import { ref, get, runTransaction } from 'firebase/database';
 import { generateSeatsFromTripData, formatTimeToArabicAMPM, formatDateToArabic } from '@/lib/constants';
 import { cn } from '@/lib/utils';
@@ -40,37 +40,32 @@ export default function TripDetailsPage() {
     setTrip(null); 
     setSelectedSeats([]); 
     setCurrentPaymentSelectionInDialog(null);
+
     if (!tripIdFromParams) {
         toast({ title: "خطأ", description: "معرّف الرحلة غير موجود.", variant: "destructive" });
         setIsLoading(false);
-        router.replace('/');
+        router.replace('/'); // Go back to search if no ID
         return;
     }
     try {
-      // Fetch trip data from primary DB (tawsellah3)
       const tripRef = ref(dbPrimary, `currentTrips/${tripIdFromParams}`);
       const tripSnapshot = await get(tripRef);
 
       if (tripSnapshot.exists()) {
         const fbTrip = tripSnapshot.val() as FirebaseTripType;
         
-        // Fetch driver data - assuming driver profiles might be in primary DB or rider DB.
-        // For now, let's assume driver user profiles are in the primary DB (tawsellah3) under 'users' path.
-        // If driver profiles are in dbRider, this ref should use dbRider.
-        // This part needs clarification based on where driver (FirebaseUser) profiles are stored.
-        // For this example, I'll assume they are in dbPrimary for consistency with how currentTrips are structured.
-        const driverSnapshot = await get(ref(dbPrimary, `users/${fbTrip.driverId}`));
+        const driverSnapshot = await get(ref(dbPrimary, `users/${fbTrip.driverId}`)); // Assuming driver profiles are in dbPrimary
         
         if (driverSnapshot.exists()) {
-          const driverData = driverSnapshot.val() as FirebaseUser;
+          const driverData = driverSnapshot.val() as FirebaseUser; // Assuming driver user type is FirebaseUser
           const processedSeats = generateSeatsFromTripData(fbTrip);
           
           const enrichedTrip: Trip = {
             id: fbTrip.id,
             firebaseTripData: fbTrip,
             driver: {
-              id: driverData.id,
-              name: driverData.fullName,
+              id: driverData.id || fbTrip.driverId,
+              name: driverData.fullName || "اسم غير متوفر",
               rating: driverData.rating || 0,
               photoUrl: driverData.idPhotoUrl || driverData.vehiclePhotosUrl || `https://placehold.co/100x100.png?text=${driverData.fullName?.charAt(0) || 'D'}`,
               carNumber: driverData.vehiclePlateNumber || "غير متوفر",
@@ -86,7 +81,7 @@ export default function TripDetailsPage() {
             },
             date: formatDateToArabic(fbTrip.dateTime),
             departureTime: formatTimeToArabicAMPM(fbTrip.dateTime),
-            arrivalTime: fbTrip.expectedArrivalTime,
+            arrivalTime: fbTrip.expectedArrivalTime || "غير محدد",
             price: fbTrip.pricePerPassenger,
             startPoint: fbTrip.startPoint,
             endPoint: fbTrip.destination,
@@ -204,12 +199,16 @@ export default function TripDetailsPage() {
       await processBooking(currentPaymentSelectionInDialog);
     } catch (error) {
       console.error("Booking failed in handleDialogConfirmAndBook:", error);
-      // Error toast is handled within processBooking
     }
   };
 
   const processBooking = async (paymentType: 'cash' | 'click') => {
-    if (!trip || !trip.id || selectedSeats.length === 0) {
+    const currentUser = authRider.currentUser;
+    if (!currentUser) {
+      toast({ title: "خطأ في الحجز", description: "المستخدم غير مسجل الدخول.", variant: "destructive" });
+      return;
+    }
+     if (!trip || selectedSeats.length === 0) {
       toast({ title: "خطأ", description: 'الرجاء اختيار مقعد واحد على الأقل أو الرحلة غير متوفرة.', variant: "destructive" });
       return;
     }
@@ -217,8 +216,26 @@ export default function TripDetailsPage() {
     setIsBooking(true); 
     const currentTripId = trip.id;
     
+    let userPhoneNumber = '';
     try {
-      const tripRef = ref(dbPrimary, `currentTrips/${currentTripId}`); // Use dbPrimary for trip data
+        const userRef = ref(dbRider, `users/${currentUser.uid}`);
+        const userSnapshot = await get(userRef);
+        if (!userSnapshot.exists() || !userSnapshot.val().phone) {
+            toast({ title: "خطأ في الحجز", description: "لم يتم العثور على بيانات المستخدم أو رقم الهاتف.", variant: "destructive" });
+            setIsBooking(false);
+            return;
+        }
+        userPhoneNumber = userSnapshot.val().phone as string;
+    } catch (error) {
+        console.error("Error fetching user phone number:", error);
+        toast({ title: "خطأ في الحجز", description: "خطأ في جلب بيانات المستخدم.", variant: "destructive" });
+        setIsBooking(false);
+        return;
+    }
+
+
+    try {
+      const tripRef = ref(dbPrimary, `currentTrips/${currentTripId}`);
       
       await runTransaction(tripRef, (currentFirebaseTripData: FirebaseTripType | null): FirebaseTripType | undefined => {
         if (!currentFirebaseTripData) {
@@ -235,7 +252,7 @@ export default function TripDetailsPage() {
           let newOfferedSeatsConfig = { ...(currentFirebaseTripData.offeredSeatsConfig || {}) };
           selectedSeats.forEach(seatId => {
             if (newOfferedSeatsConfig.hasOwnProperty(seatId) && newOfferedSeatsConfig[seatId] === true) { 
-              newOfferedSeatsConfig[seatId] = false; 
+              newOfferedSeatsConfig[seatId] = currentUser.uid; // Store user UID
               seatsUpdated = true;
             } else {
               throw new Error(`المقعد ${seatId} غير متاح أو تم حجزه بالفعل.`);
@@ -247,10 +264,23 @@ export default function TripDetailsPage() {
            let newOfferedSeatIds = [...currentFirebaseTripData.offeredSeatIds];
            const originalLength = newOfferedSeatIds.length;
            newOfferedSeatIds = newOfferedSeatIds.filter(id => !selectedSeats.includes(id));
+           
            if (newOfferedSeatIds.length !== originalLength - selectedSeats.length) {
              throw new Error("واحد أو أكثر من المقاعد المختارة غير متوفر.");
            }
            currentFirebaseTripData.offeredSeatIds = newOfferedSeatIds;
+           
+           // Add to passengerDetails map
+           if (!currentFirebaseTripData.passengerDetails) {
+             currentFirebaseTripData.passengerDetails = {};
+           }
+           selectedSeats.forEach(seatId => {
+             currentFirebaseTripData.passengerDetails![seatId] = {
+               userId: currentUser.uid,
+               phone: userPhoneNumber, // Storing phone here for this structure
+               bookedAt: Date.now()
+             };
+           });
            seatsUpdated = true;
         } else {
             throw new Error("لم يتم العثور على تكوين المقاعد لهذه الرحلة.");
@@ -259,34 +289,43 @@ export default function TripDetailsPage() {
         if (!seatsUpdated && selectedSeats.length > 0) { 
              throw new Error("لم يتم تحديث المقاعد المختارة في قاعدة البيانات (قد تكون محجوزة أو غير صالحة).");
         }
-        // Here you might want to record the booking itself, e.g., in a 'bookings' node.
-        // This would involve adding a new entry with tripId, userId (from authRider.currentUser.uid), selectedSeats, paymentType etc.
-        // For now, only updating trip seat availability as per previous logic.
-        
+        currentFirebaseTripData.updatedAt = Date.now();
         return currentFirebaseTripData;
       });
       
+      // Update UI state
       const updatedUiSeats = trip.seats.map(seat => 
         selectedSeats.includes(seat.id) ? { ...seat, status: 'taken' as SeatType['status'] } : seat
       );
       
-      setTrip(currentTrip => {
-        if (!currentTrip) return null;
+      setTrip(currentTripUiState => {
+        if (!currentTripUiState) return null;
         
-        let updatedFirebaseTripData = { ...currentTrip.firebaseTripData };
-        if (updatedFirebaseTripData.offeredSeatsConfig) {
-            const newConfig = {...updatedFirebaseTripData.offeredSeatsConfig};
+        let updatedFirebaseTripDataForUi = { ...currentTripUiState.firebaseTripData };
+        if (updatedFirebaseTripDataForUi.offeredSeatsConfig) {
+            const newConfig = {...updatedFirebaseTripDataForUi.offeredSeatsConfig};
             selectedSeats.forEach(seatId => {
                 if (newConfig.hasOwnProperty(seatId)) {
-                    newConfig[seatId] = false;
+                    newConfig[seatId] = currentUser.uid; // Reflect UID in UI's copy of trip data
                 }
             });
-            updatedFirebaseTripData.offeredSeatsConfig = newConfig;
-        } else if (updatedFirebaseTripData.offeredSeatIds) {
-            updatedFirebaseTripData.offeredSeatIds = updatedFirebaseTripData.offeredSeatIds.filter(id => !selectedSeats.includes(id));
+            updatedFirebaseTripDataForUi.offeredSeatsConfig = newConfig;
+        } else if (updatedFirebaseTripDataForUi.offeredSeatIds) {
+            updatedFirebaseTripDataForUi.offeredSeatIds = updatedFirebaseTripDataForUi.offeredSeatIds.filter(id => !selectedSeats.includes(id));
+            // Also update passengerDetails in UI copy if needed for immediate reflection
+            if (!updatedFirebaseTripDataForUi.passengerDetails) {
+                updatedFirebaseTripDataForUi.passengerDetails = {};
+            }
+            selectedSeats.forEach(seatId => {
+                updatedFirebaseTripDataForUi.passengerDetails![seatId] = {
+                    userId: currentUser.uid,
+                    phone: userPhoneNumber,
+                    bookedAt: Date.now()
+                };
+            });
         }
 
-        return { ...currentTrip, seats: updatedUiSeats, firebaseTripData: updatedFirebaseTripData };
+        return { ...currentTripUiState, seats: updatedUiSeats, firebaseTripData: updatedFirebaseTripDataForUi };
       });
       
       const bookedSeatsCount = selectedSeats.length; 
@@ -302,13 +341,14 @@ export default function TripDetailsPage() {
 
     } catch (error: any) {
       let handled = false;
-      if (error.message === "Trip data not found in transaction.") {
+      const errorMessage = error.message || "خطأ غير معروف";
+      if (errorMessage.includes("Trip data not found in transaction")) {
         console.warn(`HANDLED (processBooking): Booking failed because trip data for ID '${currentTripId}' was not found during transaction. This usually means the trip was deleted or the ID is incorrect.`);
         toast({ title: "خطأ في الحجز", description: "لم نتمكن من إكمال الحجز. هذه الرحلة لم تعد متوفرة أو تم حذفها.", variant: "destructive"});
         handled = true;
-      } else if (error.message.startsWith("المقعد") || error.message.startsWith("واحد أو أكثر") || error.message.startsWith("هذه الرحلة لم تعد متاحة") || error.message.startsWith("لم يتم العثور على تكوين المقاعد")) {
-        console.warn(`HANDLED (processBooking): Booking failed due to seat/trip status issue: ${error.message}`);
-        toast({ title: "خطأ في الحجز", description: error.message, variant: "destructive"});
+      } else if (errorMessage.startsWith("المقعد") || errorMessage.startsWith("واحد أو أكثر") || errorMessage.startsWith("هذه الرحلة لم تعد متاحة") || errorMessage.startsWith("لم يتم العثور على تكوين المقاعد")) {
+        console.warn(`HANDLED (processBooking): Booking failed due to seat/trip status issue: ${errorMessage}`);
+        toast({ title: "خطأ في الحجز", description: errorMessage, variant: "destructive"});
         handled = true;
       }
       

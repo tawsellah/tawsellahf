@@ -1,13 +1,13 @@
 
-import type { Seat, FirebaseTrip } from '@/types';
+import type { Seat, SeatStatus, FirebaseTrip } from '@/types';
 
 // Standard seat configuration based on common car layouts and IDs from JSON
 export const defaultSeatLayout: { id: string, name: string, row: 'front' | 'rear' | 'driver', position: number }[] = [
-  { id: 'driver_seat', name: 'السائق', row: 'driver', position: 0 }, // Special ID for the driver
+  { id: 'driver_seat', name: 'السائق', row: 'driver', position: 0 },
   { id: 'front_passenger', name: 'مقعد أمامي', row: 'front', position: 1 },
-  { id: 'back_left', name: 'مقعد خلفي يسار', row: 'rear', position: 0 },
-  { id: 'back_middle', name: 'مقعد خلفي وسط', row: 'rear', position: 1 },
-  { id: 'back_right', name: 'مقعد خلفي يمين', row: 'rear', position: 2 },
+  { id: 'back_left', name: 'خلفي يسار', row: 'rear', position: 0 },
+  { id: 'back_middle', name: 'خلفي وسط', row: 'rear', position: 1 },
+  { id: 'back_right', name: 'خلفي يمين', row: 'rear', position: 2 },
 ];
 
 
@@ -81,35 +81,38 @@ export function generateSeatsFromTripData(tripData: FirebaseTrip): Seat[] {
     });
   }
 
-  const passengerSeatIds = defaultSeatLayout.filter(s => s.id !== 'driver_seat').map(s => s.id);
+  const passengerSeatLayouts = defaultSeatLayout.filter(s => s.id !== 'driver_seat');
 
   if (tripData.offeredSeatsConfig) {
-    passengerSeatIds.forEach(seatId => {
-      const layoutSeat = defaultSeatLayout.find(s => s.id === seatId);
-      if (layoutSeat) {
-        seats.push({
-          ...layoutSeat,
-          status: tripData.offeredSeatsConfig![seatId] === true ? 'available' : 'taken',
-        });
+    passengerSeatLayouts.forEach(layoutSeat => {
+      const seatState = tripData.offeredSeatsConfig![layoutSeat.id];
+      let currentStatus: SeatStatus = 'taken'; // Default if seatId not in config or value is not true
+
+      if (seatState === true) {
+        currentStatus = 'available';
+      } else if (typeof seatState === 'string' || seatState === false) {
+        // string (userId) or false means taken
+        currentStatus = 'taken';
       }
+      
+      seats.push({
+        ...layoutSeat,
+        status: currentStatus,
+      });
     });
   } else if (tripData.offeredSeatIds) {
-    passengerSeatIds.forEach(seatId => {
-      const layoutSeat = defaultSeatLayout.find(s => s.id === seatId);
-      if (layoutSeat) {
-        seats.push({
-          ...layoutSeat,
-          status: tripData.offeredSeatIds!.includes(seatId) ? 'available' : 'taken',
-        });
-      }
+    // If using offeredSeatIds, status is 'available' if ID is in the array, otherwise 'taken'.
+    // The passengerDetails map would store who booked, but for status, this is sufficient.
+    passengerSeatLayouts.forEach(layoutSeat => {
+      seats.push({
+        ...layoutSeat,
+        status: tripData.offeredSeatIds!.includes(layoutSeat.id) ? 'available' : 'taken',
+      });
     });
   } else {
     // Fallback: if neither seat availability structure is defined, mark all non-driver seats as taken
-    passengerSeatIds.forEach(seatId => {
-      const layoutSeat = defaultSeatLayout.find(s => s.id === seatId);
-      if (layoutSeat) {
-        seats.push({ ...layoutSeat, status: 'taken' });
-      }
+    passengerSeatLayouts.forEach(layoutSeat => {
+      seats.push({ ...layoutSeat, status: 'taken' });
     });
   }
 
