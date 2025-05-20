@@ -12,7 +12,7 @@ import * as z from 'zod';
 import type { Trip, FirebaseTrip, FirebaseUser } from '@/types';
 import { TripCard } from '@/components/trip/TripCard';
 import { useState } from 'react';
-import { dbPrimary } from '@/lib/firebase'; // Changed db to dbPrimary
+import { dbPrimary } from '@/lib/firebase'; 
 import { ref, get } from 'firebase/database';
 import { jordanianGovernorates, formatTimeToArabicAMPM, formatDateToArabic, generateSeatsFromTripData } from '@/lib/constants';
 import { useToast } from '@/hooks/use-toast';
@@ -43,7 +43,7 @@ export default function TripSearchPage() {
     form.setValue('departureTime', data.departureTime);
 
     try {
-      const tripsRef = ref(dbPrimary, 'currentTrips'); // Changed db to dbPrimary
+      const tripsRef = ref(dbPrimary, 'currentTrips'); 
       const snapshot = await get(tripsRef);
 
       if (snapshot.exists()) {
@@ -109,7 +109,6 @@ export default function TripSearchPage() {
               });
             } else {
               console.warn(`Driver data not found for driverId: ${fbTrip.driverId} in tawsellah3. User might be in tawsellah-rider or data is missing.`);
-              // Optionally, create a trip entry with placeholder driver data or skip
             }
           }
           setSearchResults(enrichedTrips);
