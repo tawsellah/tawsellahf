@@ -3,17 +3,18 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Menu, X, LogIn, UserPlus, Route, LogOut, Phone } from 'lucide-react';
+import { Menu, X, LogIn, UserPlus, Route, LogOut, Phone, History } from 'lucide-react'; // Added History icon
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
 import { authRider, dbRider } from '@/lib/firebase';
-import { onAuthStateChanged, signOut, type User as FirebaseUser } from 'firebase/auth';
+import { onAuthStateChanged, signOut, type User as FirebaseUserAuth } from 'firebase/auth';
 import { ref, get } from 'firebase/database';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import type { FirebaseUser } from '@/types'; // Using our FirebaseUser type for user data from DB
 
-interface UserData {
+interface UserDisplayData {
   fullName: string;
   phoneNumber: string;
 }
@@ -23,13 +24,17 @@ const defaultNavLinks = [
   { href: '/auth/signup', label: 'إنشاء حساب جديد', icon: UserPlus, id: 'signup' },
 ];
 
+const loggedInNavLinks = [
+  { href: '/my-trips', label: 'رحلاتي', icon: History, id: 'my-trips'}
+];
+
 export function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
-  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
-  const [userData, setUserData] = useState<UserData | null>(null);
+  const [currentUserAuth, setCurrentUserAuth] = useState<FirebaseUserAuth | null>(null);
+  const [userData, setUserData] = useState<UserDisplayData | null>(null);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
 
   useEffect(() => {
@@ -37,17 +42,18 @@ export function Navbar() {
     const unsubscribe = onAuthStateChanged(authRider, async (user) => {
       setIsLoadingAuth(true);
       if (user) {
-        setCurrentUser(user);
+        setCurrentUserAuth(user);
         const userRef = ref(dbRider, `users/${user.uid}`);
         try {
           const snapshot = await get(userRef);
           if (snapshot.exists()) {
-            const dbUserData = snapshot.val();
+            const dbUserData = snapshot.val() as FirebaseUser; // Use FirebaseUser type
             setUserData({
               fullName: dbUserData.fullName || user.email || "مستخدم",
               phoneNumber: dbUserData.phoneNumber || "غير متوفر",
             });
           } else {
+            // Fallback if user data not in dbRider users node for some reason
             setUserData({
               fullName: user.email || "مستخدم",
               phoneNumber: "غير متوفر",
@@ -55,13 +61,13 @@ export function Navbar() {
           }
         } catch (error) {
             console.error("Failed to fetch user data:", error);
-            setUserData({ // Fallback on error
+            setUserData({ 
               fullName: user.email || "مستخدم",
               phoneNumber: "خطأ في تحميل البيانات",
             });
         }
       } else {
-        setCurrentUser(null);
+        setCurrentUserAuth(null);
         setUserData(null);
       }
       setIsLoadingAuth(false);
@@ -76,7 +82,6 @@ export function Navbar() {
       router.push('/'); 
     } catch (error) {
       console.error("Error signing out:", error);
-      // Consider showing a toast message for sign-out errors
     }
   };
   
@@ -116,14 +121,16 @@ export function Navbar() {
   }
   
   const renderNavItems = (isMobile = false) => {
-    if (currentUser && userData) {
+    if (currentUserAuth && userData) {
       // Logged-in state
+      const itemsToRender = [...loggedInNavLinks];
+
       if (isMobile) {
         return (
           <>
             <div className="flex items-center gap-3 p-4 border-b mb-2">
               <Avatar>
-                <AvatarImage src={currentUser.photoURL || undefined} alt={userData.fullName} data-ai-hint="user avatar" />
+                <AvatarImage src={currentUserAuth.photoURL || undefined} alt={userData.fullName} data-ai-hint="user avatar" />
                 <AvatarFallback>{userData.fullName.charAt(0).toUpperCase()}</AvatarFallback>
               </Avatar>
               <div>
@@ -134,6 +141,9 @@ export function Navbar() {
                 </p>
               </div>
             </div>
+            {itemsToRender.map((link) => (
+              <NavLinkItem key={link.id} {...link} isMobile={isMobile} />
+            ))}
             <Button
               variant="ghost"
               onClick={() => {
@@ -151,8 +161,11 @@ export function Navbar() {
         // Desktop logged-in view
         return (
           <div className="flex items-center gap-4">
+            {itemsToRender.map((link) => (
+              <NavLinkItem key={link.id} {...link} isMobile={isMobile} />
+            ))}
             <Avatar>
-              <AvatarImage src={currentUser.photoURL || undefined} alt={userData.fullName} data-ai-hint="user avatar" />
+              <AvatarImage src={currentUserAuth.photoURL || undefined} alt={userData.fullName} data-ai-hint="user avatar" />
               <AvatarFallback>{userData.fullName.charAt(0).toUpperCase()}</AvatarFallback>
             </Avatar>
             <div className="text-sm text-right">

@@ -8,9 +8,8 @@ export interface FirebaseTrip {
   id: string;
   meetingPoint?: string;
   notes?: string;
-  offeredSeatIds?: string[]; // e.g., ["front_passenger"] - if this is used, passengerDetails map will store who booked.
-  offeredSeatsConfig?: { 
-    // true if available, object with booking details if booked.
+  offeredSeatIds?: string[];
+  offeredSeatsConfig?: {
     [seatId: string]: boolean | { userId: string; phone: string; bookedAt: number };
   };
   pricePerPassenger: number;
@@ -18,12 +17,11 @@ export interface FirebaseTrip {
   status: 'upcoming' | 'ongoing' | 'completed' | 'cancelled';
   stops?: string[];
   updatedAt?: number;
-  // New field to store booking details, especially useful if offeredSeatIds is the primary mechanism
   passengerDetails?: {
     [seatId: string]: {
       userId: string;
-      phone: string; // Storing phone directly here
-      bookedAt: number; 
+      phone: string;
+      bookedAt: number;
     };
   };
 }
@@ -43,61 +41,85 @@ export interface FirebaseUser {
     click?: boolean;
     clickCode?: string;
   };
-  phone: string; // User's phone number
+  phone?: string; // User's phone number (used in tawsellah3 users node)
+  phoneNumber?: string; // User's phone number (used in tawsellah-rider users node)
   rating?: number;
   tripsCount?: number;
   vehicleColor?: string;
   vehicleMakeModel?: string;
-  vehiclePhotosUrl?: string; // Can be a single URL or array, adapt as needed
+  vehiclePhotosUrl?: string;
   vehiclePlateNumber?: string;
   vehicleType?: string;
   vehicleYear?: string;
 }
 
-// Combined Trip type for UI, merging FirebaseTrip and relevant FirebaseUser details
 export interface Trip {
-  id: string; // from FirebaseTrip.id
-  firebaseTripData: FirebaseTrip; // Store original trip data if needed for updates
-
+  id: string;
+  firebaseTripData: FirebaseTrip;
   driver: {
-    id: string; 
-    name: string; 
-    rating: number; 
-    photoUrl: string; 
-    carNumber: string; 
-    carModel: string; 
-    carColor: string; 
-    carColorName?: string; 
-    clickCode?: string; 
+    id: string;
+    name: string;
+    rating: number;
+    photoUrl: string;
+    carNumber: string;
+    carModel: string;
+    carColor: string;
+    carColorName?: string;
+    clickCode?: string;
   };
   car: {
-    name: string; 
-    color: string; 
+    name: string;
+    color: string;
     colorName?: string;
   };
-
-  date: string; 
-  departureTime: string; 
-  arrivalTime: string; 
-  price: number; 
-  startPoint: string; 
-  endPoint: string; 
-  meetingPoint?: string; 
-  notes?: string; 
+  date: string;
+  departureTime: string;
+  arrivalTime: string;
+  price: number;
+  startPoint: string;
+  endPoint: string;
+  meetingPoint?: string;
+  notes?: string;
   status: FirebaseTrip['status'];
-  seats: Seat[]; 
+  seats: Seat[];
 }
 
 export type SeatStatus = 'available' | 'selected' | 'taken' | 'driver';
 
 export interface Seat {
-  id: string; 
-  name: string; 
+  id: string;
+  name: string;
   status: SeatStatus;
-  row: 'front' | 'rear' | 'driver'; 
-  position: number; 
-  price?: number; 
-  // Optional: if you want to store who booked the seat in the UI Seat object
+  row: 'front' | 'rear' | 'driver';
+  position: number;
+  price?: number;
   bookedBy?: { userId: string; phone: string };
 }
 
+// New type for storing trip history in "tawsellah-rider" database
+export interface StoredHistoryTrip {
+  bookingId: string;        // Unique ID for this booking
+  tripId: string;           // ID of the original trip from currentTrips (tawsellah3)
+  seatId: string;
+  seatName: string;
+  tripPrice: number;
+  tripDateTime: string;     // ISO string from original trip's dateTime
+  departureCityValue: string;
+  arrivalCityValue: string;
+  driverId: string;         // Snapshot from original trip
+  driverNameSnapshot: string; // Snapshot of driver's name at booking
+  bookedAt: number;         // Timestamp of booking
+  userId: string;           // UID of the user who booked
+}
+
+// Type for displaying trips in "My Trips" page, combining StoredHistoryTrip and live original trip data
+export interface DisplayableHistoryTrip extends StoredHistoryTrip {
+  tripDateDisplay: string;
+  tripTimeDisplay: string;
+  dayOfWeekDisplay: string;
+  departureCityDisplay: string;
+  arrivalCityDisplay: string;
+  currentTripStatusDisplay: 'مكتملة' | 'حالية' | 'قادمة' | 'ملغاة' | 'مؤرشفة (غير معروفة)';
+  // Add any other fields needed for display, e.g., original driver's current details if fetched
+  originalTripExists: boolean;
+}
