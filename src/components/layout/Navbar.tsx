@@ -1,39 +1,91 @@
+
 "use client";
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { Menu, X, LogIn, UserPlus, Route } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import { Menu, X, LogIn, UserPlus, Route, LogOut, Phone } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
+import { authRider, dbRider } from '@/lib/firebase';
+import { onAuthStateChanged, signOut, type User as FirebaseUser } from 'firebase/auth';
+import { ref, get } from 'firebase/database';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
-const navLinks = [
-  { href: '/auth/signin', label: 'تسجيل الدخول', icon: LogIn },
-  { href: '/auth/signup', label: 'إنشاء حساب جديد', icon: UserPlus },
-  // Example for a main page link if user is logged in (placeholder)
-  // { href: '/', label: 'الرئيسية', icon: Home }, 
+interface UserData {
+  fullName: string;
+  phoneNumber: string;
+}
+
+const defaultNavLinks = [
+  { href: '/auth/signin', label: 'تسجيل الدخول', icon: LogIn, id: 'signin' },
+  { href: '/auth/signup', label: 'إنشاء حساب جديد', icon: UserPlus, id: 'signup' },
 ];
 
 export function Navbar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
+  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
+  const [userData, setUserData] = useState<UserData | null>(null);
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
 
   useEffect(() => {
     setIsMounted(true);
+    const unsubscribe = onAuthStateChanged(authRider, async (user) => {
+      setIsLoadingAuth(true);
+      if (user) {
+        setCurrentUser(user);
+        const userRef = ref(dbRider, `users/${user.uid}`);
+        try {
+          const snapshot = await get(userRef);
+          if (snapshot.exists()) {
+            const dbUserData = snapshot.val();
+            setUserData({
+              fullName: dbUserData.fullName || user.email || "مستخدم",
+              phoneNumber: dbUserData.phoneNumber || "غير متوفر",
+            });
+          } else {
+            setUserData({
+              fullName: user.email || "مستخدم",
+              phoneNumber: "غير متوفر",
+            });
+          }
+        } catch (error) {
+            console.error("Failed to fetch user data:", error);
+            setUserData({ // Fallback on error
+              fullName: user.email || "مستخدم",
+              phoneNumber: "خطأ في تحميل البيانات",
+            });
+        }
+      } else {
+        setCurrentUser(null);
+        setUserData(null);
+      }
+      setIsLoadingAuth(false);
+    });
+    return () => unsubscribe();
   }, []);
 
-  if (!isMounted) {
-    return <div className="h-16 bg-card shadow-md"></div>; // Placeholder for SSR to avoid hydration mismatch
-  }
-
-  const NavLinkItem = ({ href, label, icon: Icon, isMobile }: typeof navLinks[0] & {isMobile?: boolean}) => (
+  const handleSignOut = async () => {
+    try {
+      await signOut(authRider);
+      setIsMobileMenuOpen(false);
+      router.push('/'); 
+    } catch (error) {
+      console.error("Error signing out:", error);
+      // Consider showing a toast message for sign-out errors
+    }
+  };
+  
+  const NavLinkItem = ({ href, label, icon: Icon, isMobile }: {href: string, label: string, icon: React.ElementType, isMobile?: boolean, id:string}) => (
     <Link href={href} passHref legacyBehavior>
       <a
         onClick={() => isMobile && isMobileMenuOpen && setIsMobileMenuOpen(false)}
         className={cn(
-          "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors duration-300 ease-in-out",
+          "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors duration-300 ease-in-out w-full md:w-auto justify-start md:justify-center",
           pathname === href
             ? "bg-primary text-primary-foreground"
             : "text-foreground hover:bg-accent hover:text-accent-foreground",
@@ -47,6 +99,83 @@ export function Navbar() {
     </Link>
   );
 
+  if (!isMounted || isLoadingAuth) {
+    return (
+      <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-card/95 shadow-md backdrop-blur supports-[backdrop-filter]:bg-card/60">
+        <div className="container mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+          <Link href="/" passHref legacyBehavior>
+            <a className="flex items-center gap-2 text-xl font-bold text-primary">
+              <Route className="h-7 w-7" />
+              <span>رحلتي السريعة</span>
+            </a>
+          </Link>
+          <div className="h-8 w-24 rounded-md bg-muted animate-pulse md:w-48"></div> {/* Skeleton */}
+        </div>
+      </header>
+    );
+  }
+  
+  const renderNavItems = (isMobile = false) => {
+    if (currentUser && userData) {
+      // Logged-in state
+      if (isMobile) {
+        return (
+          <>
+            <div className="flex items-center gap-3 p-4 border-b mb-2">
+              <Avatar>
+                <AvatarImage src={currentUser.photoURL || undefined} alt={userData.fullName} data-ai-hint="user avatar" />
+                <AvatarFallback>{userData.fullName.charAt(0).toUpperCase()}</AvatarFallback>
+              </Avatar>
+              <div>
+                <p className="font-semibold">{userData.fullName}</p>
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Phone className="h-3 w-3" /> 
+                  {userData.phoneNumber}
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                handleSignOut();
+                if (isMobileMenuOpen) setIsMobileMenuOpen(false);
+              }}
+              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-accent hover:text-accent-foreground justify-start"
+            >
+              <LogOut className="h-5 w-5" />
+              <span>تسجيل الخروج</span>
+            </Button>
+          </>
+        );
+      } else {
+        // Desktop logged-in view
+        return (
+          <div className="flex items-center gap-4">
+            <Avatar>
+              <AvatarImage src={currentUser.photoURL || undefined} alt={userData.fullName} data-ai-hint="user avatar" />
+              <AvatarFallback>{userData.fullName.charAt(0).toUpperCase()}</AvatarFallback>
+            </Avatar>
+            <div className="text-sm text-right">
+              <div className="font-medium text-foreground">{userData.fullName}</div>
+              <div className="text-xs text-muted-foreground dir-ltr flex items-center justify-end gap-1">
+                {userData.phoneNumber}
+                <Phone className="h-3 w-3" /> 
+              </div>
+            </div>
+            <Button variant="outline" size="sm" onClick={handleSignOut} className="rounded-lg">
+              <LogOut className="ms-2 h-4 w-4" />
+              تسجيل الخروج
+            </Button>
+          </div>
+        );
+      }
+    } else {
+      // Logged-out state
+      return defaultNavLinks.map((link) => (
+        <NavLinkItem key={link.id} {...link} isMobile={isMobile} />
+      ));
+    }
+  };
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-card/95 shadow-md backdrop-blur supports-[backdrop-filter]:bg-card/60">
@@ -58,14 +187,10 @@ export function Navbar() {
           </a>
         </Link>
 
-        {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center gap-2">
-          {navLinks.map((link) => (
-            <NavLinkItem key={link.href} {...link} />
-          ))}
+          {renderNavItems(false)}
         </nav>
 
-        {/* Mobile Navigation Trigger */}
         <div className="md:hidden">
           <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
             <SheetTrigger asChild>
@@ -73,8 +198,8 @@ export function Navbar() {
                 <Menu className="h-6 w-6" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="right" className="w-[280px] bg-card p-6">
-              <div className="mb-6 flex items-center justify-between">
+            <SheetContent side="right" className="w-[280px] bg-card p-0 pt-6">
+              <div className="mb-6 flex items-center justify-between px-6">
                  <Link href="/" passHref legacyBehavior>
                   <a onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-2 text-lg font-bold text-primary">
                     <Route className="h-6 w-6" />
@@ -87,10 +212,8 @@ export function Navbar() {
                   </Button>
                 </SheetClose>
               </div>
-              <nav className="flex flex-col gap-4">
-                {navLinks.map((link) => (
-                  <NavLinkItem key={link.href} {...link} isMobile={true} />
-                ))}
+              <nav className="flex flex-col gap-1 px-4">
+                {renderNavItems(true)}
               </nav>
             </SheetContent>
           </Sheet>
