@@ -44,7 +44,7 @@ export default function TripDetailsPage() {
     if (!tripIdFromParams) {
         toast({ title: "خطأ", description: "معرّف الرحلة غير موجود.", variant: "destructive" });
         setIsLoading(false);
-        router.replace('/'); // Go back to search if no ID
+        router.replace('/'); 
         return;
     }
     try {
@@ -198,8 +198,6 @@ export default function TripDetailsPage() {
     try {
       await processBooking(currentPaymentSelectionInDialog);
     } catch (error) {
-      // Errors from processBooking (like user not found, trip gone) are handled with toasts there.
-      // This console.error is for unexpected errors during the call itself.
       console.error("Booking failed in handleDialogConfirmAndBook wrapper:", error);
     }
   };
@@ -216,19 +214,19 @@ export default function TripDetailsPage() {
     }
 
     setIsBooking(true); 
-    const currentTripId = trip.id;
+    const currentTripId = trip.id; 
     
     let userPhoneNumber = '';
     let userId = currentUser.uid;
     try {
         const userRef = ref(dbRider, `users/${userId}`);
         const userSnapshot = await get(userRef);
-        if (!userSnapshot.exists() || !userSnapshot.val().phone) {
+        if (!userSnapshot.exists() || !userSnapshot.val().phoneNumber) { // Changed from .phone to .phoneNumber
             toast({ title: "خطأ في الحجز", description: "لم يتم العثور على بيانات المستخدم أو رقم الهاتف.", variant: "destructive" });
             setIsBooking(false);
             return;
         }
-        userPhoneNumber = userSnapshot.val().phone as string;
+        userPhoneNumber = userSnapshot.val().phoneNumber as string; // Changed from .phone to .phoneNumber
     } catch (error) {
         console.error("Error fetching user phone number:", error);
         toast({ title: "خطأ في الحجز", description: "خطأ في جلب بيانات المستخدم.", variant: "destructive" });
@@ -238,6 +236,7 @@ export default function TripDetailsPage() {
 
     try {
       const tripRef = ref(dbPrimary, `currentTrips/${currentTripId}`);
+      const bookingDetails = { userId, phone: userPhoneNumber, bookedAt: Date.now() };
       
       await runTransaction(tripRef, (currentFirebaseTripData: FirebaseTripType | null): FirebaseTripType | undefined => {
         if (!currentFirebaseTripData) {
@@ -249,8 +248,7 @@ export default function TripDetailsPage() {
         }
 
         let seatsUpdated = false;
-        const bookingDetails = { userId, phone: userPhoneNumber, bookedAt: Date.now() };
-
+        
         if (currentFirebaseTripData.offeredSeatsConfig) {
           let newOfferedSeatsConfig = { ...(currentFirebaseTripData.offeredSeatsConfig || {}) };
           selectedSeats.forEach(seatId => {
@@ -291,7 +289,6 @@ export default function TripDetailsPage() {
         return currentFirebaseTripData;
       });
       
-      // Update UI state
       const updatedUiSeats = trip.seats.map(seat => 
         selectedSeats.includes(seat.id) ? { ...seat, status: 'taken' as SeatType['status'], bookedBy: { userId, phone: userPhoneNumber } } : seat
       );
@@ -346,8 +343,7 @@ export default function TripDetailsPage() {
         rawError: error
       });
 
-
-      if (errorMessage.includes("Trip data not found in transaction")) {
+      if (errorMessage === "Trip data not found in transaction.") {
         toast({ title: "خطأ في الحجز", description: "لم نتمكن من إكمال الحجز. هذه الرحلة لم تعد متوفرة أو تم حذفها.", variant: "destructive"});
         handled = true;
       } else if (errorMessage.startsWith("المقعد") || errorMessage.startsWith("واحد أو أكثر") || errorMessage.startsWith("هذه الرحلة لم تعد متاحة") || errorMessage.startsWith("لم يتم العثور على تكوين المقاعد")) {
@@ -534,3 +530,6 @@ export default function TripDetailsPage() {
     </div>
   );
 }
+
+
+    
