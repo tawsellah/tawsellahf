@@ -14,7 +14,7 @@ import { Label } from '@/components/ui/label';
 import { CheckCircle, XCircle, Info, Armchair, Check, ArrowLeft, Loader2, DollarSign, Smartphone, Copy, MapPin, LogIn } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { dbPrimary, authRider, dbRider } from '@/lib/firebase'; 
-import { ref, get, runTransaction, push, set as firebaseSet, child } from 'firebase/database'; // Added push, firebaseSet, child
+import { ref, get, runTransaction, push, set as firebaseSet, child } from 'firebase/database';
 import { generateSeatsFromTripData, formatTimeToArabicAMPM, formatDateToArabic, getGovernorateDisplayNameAr } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 
@@ -83,8 +83,8 @@ export default function TripDetailsPage() {
             departureTime: formatTimeToArabicAMPM(fbTrip.dateTime),
             arrivalTime: fbTrip.expectedArrivalTime || "غير محدد",
             price: fbTrip.pricePerPassenger,
-            startPoint: fbTrip.startPoint,
-            endPoint: fbTrip.destination,
+            startPoint: getGovernorateDisplayNameAr(fbTrip.startPoint),
+            endPoint: getGovernorateDisplayNameAr(fbTrip.destination),
             meetingPoint: fbTrip.meetingPoint,
             notes: fbTrip.notes,
             status: fbTrip.status,
@@ -198,14 +198,19 @@ export default function TripDetailsPage() {
     try {
       await processBooking(currentPaymentSelectionInDialog);
     } catch (error) {
-      console.error("Booking failed in handleDialogConfirmAndBook wrapper:", error);
+      // processBooking itself handles logging and user-facing toasts for its errors
+      console.error("Booking initiation failed in handleDialogConfirmAndBook wrapper:", error);
     }
   };
 
   const processBooking = async (paymentType: 'cash' | 'click') => {
     const currentUser = authRider.currentUser;
-    if (!currentUser || !trip) {
-        toast({ title: "خطأ في الحجز", description: "المستخدم غير مسجل الدخول أو الرحلة غير محددة.", variant: "destructive" });
+     if (!trip) {
+        toast({ title: "خطأ في الحجز", description: "بيانات الرحلة غير متوفرة.", variant: "destructive" });
+        return;
+    }
+    if (!currentUser) {
+        toast({ title: "خطأ في الحجز", description: "المستخدم غير مسجل الدخول.", variant: "destructive" });
         return;
     }
     if (selectedSeats.length === 0) {
@@ -229,15 +234,15 @@ export default function TripDetailsPage() {
         }
         userPhoneNumber = userSnapshot.val().phoneNumber as string;
     } catch (error) {
-        console.error("Error fetching user phone number:", error);
+        console.error("Error fetching user phone number from dbRider:", error);
         toast({ title: "خطأ في الحجز", description: "خطأ في جلب بيانات المستخدم.", variant: "destructive" });
         setIsBooking(false);
         return;
     }
 
     const tripRef = ref(dbPrimary, `currentTrips/${currentTripId}`);
-    const bookedAt = Date.now();
-    const bookingDetails = { userId, phone: userPhoneNumber, bookedAt };
+    const bookedAtTimestamp = Date.now();
+    const bookingDetailsForDB = { userId, phone: userPhoneNumber, bookedAt: bookedAtTimestamp };
 
     try {
       await runTransaction(tripRef, (currentFirebaseTripData: FirebaseTripType | null): FirebaseTripType | undefined => {
@@ -249,14 +254,14 @@ export default function TripDetailsPage() {
             throw new Error("هذه الرحلة لم تعد متاحة للحجز (حالتها ليست 'upcoming').");
         }
         
-        let seatsUpdated = false;
+        let seatsUpdatedInTransaction = false;
         
         if (currentFirebaseTripData.offeredSeatsConfig) {
           let newOfferedSeatsConfig = { ...(currentFirebaseTripData.offeredSeatsConfig || {}) };
           selectedSeats.forEach(seatId => {
             if (newOfferedSeatsConfig.hasOwnProperty(seatId) && newOfferedSeatsConfig[seatId] === true) { 
-              newOfferedSeatsConfig[seatId] = bookingDetails;
-              seatsUpdated = true;
+              newOfferedSeatsConfig[seatId] = bookingDetailsForDB;
+              seatsUpdatedInTransaction = true;
             } else {
               throw new Error(`المقعد ${seatId} غير متاح أو تم حجزه بالفعل.`);
             }
@@ -278,27 +283,26 @@ export default function TripDetailsPage() {
            }
            selectedSeats.forEach(seatId => {
              if(currentFirebaseTripData.passengerDetails) {
-                currentFirebaseTripData.passengerDetails[seatId] = bookingDetails;
+                currentFirebaseTripData.passengerDetails[seatId] = bookingDetailsForDB;
              }
            });
-           seatsUpdated = true;
+           seatsUpdatedInTransaction = true;
         } else {
             throw new Error("لم يتم العثور على تكوين المقاعد لهذه الرحلة.");
         }
         
-        if (!seatsUpdated && selectedSeats.length > 0) { 
+        if (!seatsUpdatedInTransaction && selectedSeats.length > 0) { 
              throw new Error("لم يتم تحديث المقاعد المختارة في قاعدة البيانات (قد تكون محجوزة أو غير صالحة).");
         }
         currentFirebaseTripData.updatedAt = Date.now();
         return currentFirebaseTripData;
       });
       
-      // After successful transaction, save to historytrips in dbRider
       for (const seatId of selectedSeats) {
         const seatInfo = trip.seats.find(s => s.id === seatId);
         if (seatInfo) {
           const historyTripsUserRef = ref(dbRider, `historytrips/${userId}`);
-          const newBookingRef = push(historyTripsUserRef); // Generates a unique bookingId
+          const newBookingRef = push(historyTripsUserRef); 
           const bookingId = newBookingRef.key;
 
           if (bookingId) {
@@ -307,13 +311,13 @@ export default function TripDetailsPage() {
               tripId: currentTripId,
               seatId: seatId,
               seatName: seatInfo.name,
-              tripPrice: trip.price, // This is price per passenger
+              tripPrice: trip.price, 
               tripDateTime: trip.firebaseTripData.dateTime,
               departureCityValue: trip.firebaseTripData.startPoint,
               arrivalCityValue: trip.firebaseTripData.destination,
               driverId: trip.driver.id,
               driverNameSnapshot: trip.driver.name,
-              bookedAt: bookedAt,
+              bookedAt: bookedAtTimestamp,
               userId: userId,
             };
             await firebaseSet(newBookingRef, historyTripData);
@@ -329,13 +333,12 @@ export default function TripDetailsPage() {
         if (!currentTripUiState) return null;
         
         let updatedFirebaseTripDataForUi = { ...currentTripUiState.firebaseTripData };
-        const bookingDetailsForUi = { userId, phone: userPhoneNumber, bookedAt };
-
+        
         if (updatedFirebaseTripDataForUi.offeredSeatsConfig) {
             const newConfig = {...updatedFirebaseTripDataForUi.offeredSeatsConfig};
             selectedSeats.forEach(seatId => {
                 if (newConfig.hasOwnProperty(seatId)) {
-                    newConfig[seatId] = bookingDetailsForUi;
+                    newConfig[seatId] = bookingDetailsForDB;
                 }
             });
             updatedFirebaseTripDataForUi.offeredSeatsConfig = newConfig;
@@ -346,7 +349,7 @@ export default function TripDetailsPage() {
             }
             selectedSeats.forEach(seatId => {
                  if(updatedFirebaseTripDataForUi.passengerDetails) { 
-                    updatedFirebaseTripDataForUi.passengerDetails[seatId] = bookingDetailsForUi;
+                    updatedFirebaseTripDataForUi.passengerDetails[seatId] = bookingDetailsForDB;
                  }
             });
         }
@@ -369,14 +372,12 @@ export default function TripDetailsPage() {
       let handled = false;
       const errorMessage = error?.message || "خطأ غير معروف";
       
-      console.error("Error in processBooking:", {
-        message: errorMessage,
-        tripId: currentTripId,
-        selectedSeats,
-        userId,
-        rawError: error
-      });
-
+      // Log the raw error object for better debugging in the browser console
+      console.error(
+        `processBooking - Error for trip ${currentTripId}, user ${userId}, seats ${selectedSeats.join(', ')}. Raw error:`,
+        error
+      );
+      
       if (errorMessage === "Trip data not found in transaction.") {
         toast({ title: "خطأ في الحجز", description: "لم نتمكن من إكمال الحجز. هذه الرحلة لم تعد متوفرة أو تم حذفها.", variant: "destructive"});
         handled = true;
@@ -564,3 +565,4 @@ export default function TripDetailsPage() {
     </div>
   );
 }
+
