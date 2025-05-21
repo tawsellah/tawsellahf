@@ -2,13 +2,16 @@
 "use client";
 
 import type { DisplayableHistoryTrip } from '@/types';
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { CalendarDays, Clock, DollarSign, MapPin, ChevronLeft, Tag, Car, User, CheckCircle, XCircle, AlertTriangle, RefreshCwIcon } from 'lucide-react'; // Added User icon
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { CalendarDays, Clock, DollarSign, MapPin, ChevronLeft, Tag, Car, User, CheckCircle, XCircle, AlertTriangle, RefreshCwIcon, Ban } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 interface HistoryTripCardProps {
   trip: DisplayableHistoryTrip;
+  onInitiateCancel: (trip: DisplayableHistoryTrip) => void;
+  isProcessingCancellation: boolean;
 }
 
 const statusStyles: Record<DisplayableHistoryTrip['currentTripStatusDisplay'], string> = {
@@ -16,20 +19,25 @@ const statusStyles: Record<DisplayableHistoryTrip['currentTripStatusDisplay'], s
   'حالية': 'bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-800 dark:text-blue-200 dark:border-blue-600',
   'قادمة': 'bg-yellow-100 text-yellow-700 border-yellow-300 dark:bg-yellow-800 dark:text-yellow-200 dark:border-yellow-600',
   'ملغاة': 'bg-red-100 text-red-700 border-red-300 dark:bg-red-800 dark:text-red-200 dark:border-red-600',
+  'ملغاة (بواسطتك)': 'bg-orange-100 text-orange-700 border-orange-300 dark:bg-orange-800 dark:text-orange-200 dark:border-orange-600',
+  'ملغاة (النظام)': 'bg-purple-100 text-purple-700 border-purple-300 dark:bg-purple-800 dark:text-purple-200 dark:border-purple-600',
   'مؤرشفة (غير معروفة)': 'bg-gray-100 text-gray-700 border-gray-300 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600',
 };
 
 const statusIcons: Record<DisplayableHistoryTrip['currentTripStatusDisplay'], React.ElementType> = {
     'مكتملة': CheckCircle,
-    'حالية': RefreshCwIcon, // Or another icon for ongoing
+    'حالية': RefreshCwIcon,
     'قادمة': Clock,
     'ملغاة': XCircle,
+    'ملغاة (بواسطتك)': Ban,
+    'ملغاة (النظام)': Ban,
     'مؤرشفة (غير معروفة)': AlertTriangle,
 };
 
 
-export function HistoryTripCard({ trip }: HistoryTripCardProps) {
+export function HistoryTripCard({ trip, onInitiateCancel, isProcessingCancellation }: HistoryTripCardProps) {
   const StatusIcon = statusIcons[trip.currentTripStatusDisplay] || AlertTriangle;
+  const canCancel = trip.currentTripStatusDisplay === 'قادمة' && trip.status !== 'user-cancelled' && trip.status !== 'system-cancelled';
 
   return (
     <Card className="overflow-hidden shadow-lg transition-all duration-300 ease-in-out hover:shadow-xl">
@@ -72,12 +80,19 @@ export function HistoryTripCard({ trip }: HistoryTripCardProps) {
           <span>السائق: {trip.driverNameSnapshot}</span>
         </div>
       </CardContent>
-      {/* <CardFooter className="p-4 flex items-center justify-end bg-muted/50">
-        {/* You can add actions here if needed, e.g., rebook, view original trip details
-        <Button variant="ghost" size="sm">
-          تفاصيل إضافية
-        </Button>
-      </CardFooter> */}
+      {canCancel && (
+        <CardFooter className="p-4 flex items-center justify-end bg-muted/50">
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => onInitiateCancel(trip)}
+            disabled={isProcessingCancellation}
+          >
+            <XCircle className="ms-2 h-4 w-4" />
+            إلغاء هذا الحجز
+          </Button>
+        </CardFooter>
+      )}
     </Card>
   );
 }

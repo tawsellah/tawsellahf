@@ -1,4 +1,5 @@
 
+
 export interface FirebaseTrip {
   createdAt: number;
   dateTime: string; // ISO string e.g., "2025-05-22T06:50:00.000Z"
@@ -8,16 +9,16 @@ export interface FirebaseTrip {
   id: string;
   meetingPoint?: string;
   notes?: string;
-  offeredSeatIds?: string[];
-  offeredSeatsConfig?: {
-    [seatId: string]: boolean | { userId: string; phone: string; bookedAt: number };
+  offeredSeatIds?: string[]; // For trips where seats are just a list of available IDs
+  offeredSeatsConfig?: { // For trips with detailed seat configuration
+    [seatId: string]: boolean | { userId: string; phone: string; bookedAt: number }; // true if available, object if booked
   };
   pricePerPassenger: number;
   startPoint: string;
   status: 'upcoming' | 'ongoing' | 'completed' | 'cancelled';
   stops?: string[];
   updatedAt?: number;
-  passengerDetails?: {
+  passengerDetails?: { // Used if offeredSeatIds is present, maps seatId to booking details
     [seatId: string]: {
       userId: string;
       phone: string;
@@ -55,7 +56,7 @@ export interface FirebaseUser {
 
 export interface Trip {
   id: string;
-  firebaseTripData: FirebaseTrip;
+  firebaseTripData: FirebaseTrip; // Original Firebase trip data
   driver: {
     id: string;
     name: string;
@@ -67,21 +68,21 @@ export interface Trip {
     carColorName?: string;
     clickCode?: string;
   };
-  car: {
-    name: string;
-    color: string;
+  car: { // Simplified car details, often derived from driver
+    name: string; // vehicleMakeModel
+    color: string; // vehicleColor
     colorName?: string;
   };
-  date: string;
-  departureTime: string;
-  arrivalTime: string;
-  price: number;
-  startPoint: string;
-  endPoint: string;
+  date: string; // Formatted date for display
+  departureTime: string; // Formatted time for display
+  arrivalTime: string; // Formatted or direct from firebaseTripData.expectedArrivalTime
+  price: number; // pricePerPassenger
+  startPoint: string; // Formatted start point for display (Arabic name)
+  endPoint: string; // Formatted end point for display (Arabic name)
   meetingPoint?: string;
   notes?: string;
-  status: FirebaseTrip['status'];
-  seats: Seat[];
+  status: FirebaseTrip['status']; // Original status
+  seats: Seat[]; // Processed seat list for UI interaction
 }
 
 export type SeatStatus = 'available' | 'selected' | 'taken' | 'driver';
@@ -92,24 +93,25 @@ export interface Seat {
   status: SeatStatus;
   row: 'front' | 'rear' | 'driver';
   position: number;
-  price?: number;
-  bookedBy?: { userId: string; phone: string };
+  price?: number; // Usually trip.price is used per seat
+  bookedBy?: { userId: string; phone: string; bookedAt?: number }; // Include bookedAt if available
 }
 
-// New type for storing trip history in "tawsellah-rider" database
+// For storing trip history in "tawsellah-rider" database for a specific user
 export interface StoredHistoryTrip {
-  bookingId: string;        // Unique ID for this booking
+  bookingId: string;        // Unique ID for this specific seat booking
   tripId: string;           // ID of the original trip from currentTrips (tawsellah3)
   seatId: string;
   seatName: string;
   tripPrice: number;
   tripDateTime: string;     // ISO string from original trip's dateTime
-  departureCityValue: string;
-  arrivalCityValue: string;
+  departureCityValue: string; // e.g. 'amman'
+  arrivalCityValue: string;   // e.g. 'irbid'
   driverId: string;         // Snapshot from original trip
   driverNameSnapshot: string; // Snapshot of driver's name at booking
   bookedAt: number;         // Timestamp of booking
   userId: string;           // UID of the user who booked
+  status?: 'booked' | 'user-cancelled' | 'system-cancelled'; // Status of this specific booking
 }
 
 // Type for displaying trips in "My Trips" page, combining StoredHistoryTrip and live original trip data
@@ -117,9 +119,15 @@ export interface DisplayableHistoryTrip extends StoredHistoryTrip {
   tripDateDisplay: string;
   tripTimeDisplay: string;
   dayOfWeekDisplay: string;
-  departureCityDisplay: string;
-  arrivalCityDisplay: string;
-  currentTripStatusDisplay: 'مكتملة' | 'حالية' | 'قادمة' | 'ملغاة' | 'مؤرشفة (غير معروفة)';
-  // Add any other fields needed for display, e.g., original driver's current details if fetched
+  departureCityDisplay: string; // Arabic name
+  arrivalCityDisplay: string;   // Arabic name
+  currentTripStatusDisplay: 
+    | 'مكتملة' 
+    | 'حالية' 
+    | 'قادمة' 
+    | 'ملغاة' 
+    | 'ملغاة (بواسطتك)'
+    | 'ملغاة (النظام)'
+    | 'مؤرشفة (غير معروفة)';
   originalTripExists: boolean;
 }
