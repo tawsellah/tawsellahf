@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { authRider, dbRider, dbPrimary } from '@/lib/firebase';
 import { onAuthStateChanged, type User as FirebaseUserAuth } from 'firebase/auth';
 import { ref, get, child, query, orderByChild, equalTo, DataSnapshot, runTransaction, set as firebaseSet, push } from 'firebase/database';
-import type { StoredHistoryTrip, DisplayableHistoryTrip, FirebaseTrip, FirebaseUser } from '@/types';
+import type { StoredHistoryTrip, DisplayableHistoryTrip, FirebaseTrip, FirebaseUser, GroupedDisplayableTrip } from '@/types';
 import { Button } from '@/components/ui/button';
 import { HistoryTripCard } from '@/components/trip/HistoryTripCard';
 import { Loader2, History, Frown, XCircle, Info } from 'lucide-react';
@@ -26,11 +26,10 @@ export default function MyTripsPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [currentUserAuth, setCurrentUserAuth] = useState<FirebaseUserAuth | null>(null);
-  const [historyTrips, setHistoryTrips] = useState<DisplayableHistoryTrip[]>([]);
+  const [groupedHistoryTrips, setGroupedHistoryTrips] = useState<GroupedDisplayableTrip[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // State for cancellation flow
   const [showCancelSingleConfirmDialog, setShowCancelSingleConfirmDialog] = useState(false);
   const [showCancelMultipleSeatsDialog, setShowCancelMultipleSeatsDialog] = useState(false);
   const [bookingsForCurrentCancellationScope, setBookingsForCurrentCancellationScope] = useState<DisplayableHistoryTrip[]>([]);
@@ -40,7 +39,7 @@ export default function MyTripsPage() {
 
   const fetchHistoryTrips = useCallback(async (currentAuthUser: FirebaseUserAuth | null) => {
     if (!currentAuthUser) {
-      setHistoryTrips([]);
+      setGroupedHistoryTrips([]);
       setIsLoading(false);
       return;
     }
@@ -53,6 +52,7 @@ export default function MyTripsPage() {
 
       if (snapshot.exists()) {
         const storedTripsData = snapshot.val() as Record<string, StoredHistoryTrip>;
+        
         const displayableTripsPromises = Object.values(storedTripsData).map(async (storedTrip) => {
           let originalTrip: FirebaseTrip | null = null;
           let originalTripExists = false;
@@ -68,44 +68,46 @@ export default function MyTripsPage() {
           }
 
           let currentTripStatusDisplay: DisplayableHistoryTrip['currentTripStatusDisplay'] = 'مؤرشفة (غير معروفة)';
-          
-          if (storedTrip.status === 'user-cancelled') {
+          let currentStoredTripStatus = storedTrip.status || 'booked';
+
+          if (currentStoredTripStatus === 'user-cancelled') {
             currentTripStatusDisplay = 'ملغاة (بواسطتك)';
-          } else if (storedTrip.status === 'system-cancelled') {
+          } else if (currentStoredTripStatus === 'system-cancelled') {
             currentTripStatusDisplay = 'ملغاة (النظام)';
           } else if (originalTrip) {
-            const seatBookedByThisUser = originalTrip.offeredSeatsConfig && 
-                                         typeof originalTrip.offeredSeatsConfig[storedTrip.seatId] === 'object' &&
-                                         (originalTrip.offeredSeatsConfig[storedTrip.seatId] as any)?.userId === currentAuthUser.uid;
-            
-            const seatAvailableViaSeatIds = originalTrip.offeredSeatIds && 
-                                            !originalTrip.offeredSeatIds.includes(storedTrip.seatId) && 
-                                            originalTrip.passengerDetails &&
-                                            originalTrip.passengerDetails[storedTrip.seatId]?.userId === currentAuthUser.uid;
+            // Check if this specific seat is still booked by the current user in the original trip data
+            let isSeatStillBookedByCurrentUser = false;
+            if (originalTrip.offeredSeatsConfig && typeof originalTrip.offeredSeatsConfig[storedTrip.seatId] === 'object') {
+                const seatDetail = originalTrip.offeredSeatsConfig[storedTrip.seatId] as { userId: string };
+                isSeatStillBookedByCurrentUser = seatDetail.userId === currentAuthUser.uid;
+            } else if (originalTrip.passengerDetails && originalTrip.passengerDetails[storedTrip.seatId]) {
+                isSeatStillBookedByCurrentUser = originalTrip.passengerDetails[storedTrip.seatId].userId === currentAuthUser.uid;
+            }
 
-            const isSeatStillBookedByCurrentUser = seatBookedByThisUser || seatAvailableViaSeatIds;
 
-            if (!isSeatStillBookedByCurrentUser && originalTrip.status === 'upcoming') {
+            if (!isSeatStillBookedByCurrentUser && originalTrip.status === 'upcoming' && currentStoredTripStatus === 'booked') {
                currentTripStatusDisplay = 'ملغاة (النظام)';
-               // Update status in dbRider if system cancelled it
                const specificHistoryTripRef = ref(dbRider, `historytrips/${currentAuthUser.uid}/${storedTrip.bookingId}`);
                await firebaseSet(child(specificHistoryTripRef, 'status'), 'system-cancelled').catch(err => console.error("Failed to update history trip status to system-cancelled", err));
-               storedTrip.status = 'system-cancelled'; // Update local object for immediate UI reflection
+               storedTrip.status = 'system-cancelled'; // Update local object
             } else {
               switch (originalTrip.status) {
                 case 'completed': currentTripStatusDisplay = 'مكتملة'; break;
                 case 'ongoing': currentTripStatusDisplay = 'حالية'; break;
                 case 'upcoming': currentTripStatusDisplay = 'قادمة'; break;
-                case 'cancelled': currentTripStatusDisplay = 'ملغاة'; break;
+                case 'cancelled': currentTripStatusDisplay = 'ملغاة'; break; // Original trip itself is cancelled by driver/system
                 default: currentTripStatusDisplay = 'مؤرشفة (غير معروفة)';
               }
             }
-          } else {
+          } else { // Original trip not found
             const tripDate = new Date(storedTrip.tripDateTime);
-            if (tripDate < new Date()) {
-              currentTripStatusDisplay = storedTrip.status === 'booked' ? 'مكتملة' : currentTripStatusDisplay;
-            } else {
-              currentTripStatusDisplay = storedTrip.status === 'booked' ? 'ملغاة' : currentTripStatusDisplay;
+            if (currentStoredTripStatus === 'booked') {
+                currentTripStatusDisplay = tripDate < new Date() ? 'مكتملة' : 'ملغاة (النظام)'; 
+                 if (tripDate >= new Date()) { // If trip was upcoming but now missing, mark as system-cancelled
+                    const specificHistoryTripRef = ref(dbRider, `historytrips/${currentAuthUser.uid}/${storedTrip.bookingId}`);
+                    await firebaseSet(child(specificHistoryTripRef, 'status'), 'system-cancelled').catch(err => console.error("Failed to update history trip status to system-cancelled (original missing)", err));
+                    storedTrip.status = 'system-cancelled';
+                 }
             }
           }
           
@@ -118,15 +120,92 @@ export default function MyTripsPage() {
             arrivalCityDisplay: getGovernorateDisplayNameAr(storedTrip.arrivalCityValue),
             currentTripStatusDisplay,
             originalTripExists,
+            originalActualTripStatus: originalTrip?.status,
           };
         });
 
-        const resolvedTrips = (await Promise.all(displayableTripsPromises)) as DisplayableHistoryTrip[];
-        resolvedTrips.sort((a, b) => new Date(b.tripDateTime).getTime() - new Date(a.tripDateTime).getTime());
-        setHistoryTrips(resolvedTrips);
+        const resolvedIndividualTrips = (await Promise.all(displayableTripsPromises)) as DisplayableHistoryTrip[];
+        
+        // Group trips by originalTripId
+        const groupedTripsMap = new Map<string, GroupedDisplayableTrip>();
+        resolvedIndividualTrips.forEach(individualTrip => {
+          if (!groupedTripsMap.has(individualTrip.tripId)) {
+            // Determine overall status for cancellation logic and card header display
+            let overallStatusForCancellation: FirebaseTrip['status'] | 'unknown' = 'unknown';
+            let cardHeaderDisplay: GroupedDisplayableTrip['cardHeaderStatusDisplay'] = 'مؤرشفة';
+            let canCancelAny = false;
+
+            if (individualTrip.originalTripExists && individualTrip.originalActualTripStatus) {
+                overallStatusForCancellation = individualTrip.originalActualTripStatus;
+                switch(individualTrip.originalActualTripStatus) {
+                    case 'upcoming': cardHeaderDisplay = 'قادمة'; break;
+                    case 'completed': cardHeaderDisplay = 'مكتملة'; break;
+                    case 'cancelled': cardHeaderDisplay = 'ملغاة'; break;
+                    case 'ongoing': cardHeaderDisplay = 'حالية'; break; // Or map to a specific display string
+                    default: cardHeaderDisplay = 'مؤرشفة';
+                }
+            } else if (!individualTrip.originalTripExists) {
+                 const tripDate = new Date(individualTrip.tripDateTime);
+                 cardHeaderDisplay = tripDate < new Date() ? 'مكتملة' : 'ملغاة';
+            }
+
+
+            groupedTripsMap.set(individualTrip.tripId, {
+              originalTripId: individualTrip.tripId,
+              tripDateDisplay: individualTrip.tripDateDisplay,
+              tripTimeDisplay: individualTrip.tripTimeDisplay,
+              dayOfWeekDisplay: individualTrip.dayOfWeekDisplay,
+              departureCityDisplay: individualTrip.departureCityDisplay,
+              arrivalCityDisplay: individualTrip.arrivalCityDisplay,
+              driverNameSnapshot: individualTrip.driverNameSnapshot,
+              overallTripStatusForCancellationLogic: overallStatusForCancellation,
+              originalTripExists: individualTrip.originalTripExists,
+              userBookingsForThisTrip: [],
+              cardHeaderStatusDisplay: cardHeaderDisplay, // Initial general status
+              canCancelAnyBookingInGroup: false, // Will be updated below
+            });
+          }
+          const group = groupedTripsMap.get(individualTrip.tripId)!;
+          group.userBookingsForThisTrip.push(individualTrip);
+        });
+
+        const finalGroupedTrips: GroupedDisplayableTrip[] = Array.from(groupedTripsMap.values()).map(group => {
+            const activeBookings = group.userBookingsForThisTrip.filter(
+              b => b.status !== 'user-cancelled' && b.status !== 'system-cancelled'
+            );
+            group.canCancelAnyBookingInGroup = group.overallTripStatusForCancellationLogic === 'upcoming' && activeBookings.length > 0;
+            
+            // Refine cardHeaderStatusDisplay based on individual bookings
+            if (activeBookings.length === 0 && group.userBookingsForThisTrip.length > 0) {
+                // All bookings for this original trip are cancelled by user or system
+                const allUserCancelled = group.userBookingsForThisTrip.every(b => b.status === 'user-cancelled');
+                const allSystemCancelled = group.userBookingsForThisTrip.every(b => b.status === 'system-cancelled');
+                if (allUserCancelled) group.cardHeaderStatusDisplay = 'ملغاة (بواسطتك)';
+                else if (allSystemCancelled) group.cardHeaderStatusDisplay = 'ملغاة (النظام)';
+                else group.cardHeaderStatusDisplay = 'ملغاة'; // Mixed cancellations
+            } else if (activeBookings.length > 0 && activeBookings.length < group.userBookingsForThisTrip.length) {
+                group.cardHeaderStatusDisplay = 'متعدد الحالات'; // Some active, some cancelled
+            } else if (activeBookings.length > 0 && group.overallTripStatusForCancellationLogic !== 'upcoming') {
+                // Active bookings exist but original trip is no longer upcoming (e.g., completed, driver cancelled)
+                // The individualTrip.currentTripStatusDisplay should reflect this
+                // For the group card, if the original trip is 'completed', show 'مكتملة'
+                if (group.overallTripStatusForCancellationLogic === 'completed') group.cardHeaderStatusDisplay = 'مكتملة';
+                else if (group.overallTripStatusForCancellationLogic === 'cancelled') group.cardHeaderStatusDisplay = 'ملغاة';
+                // else keep the status derived from overallTripStatusForCancellationLogic
+            }
+
+
+            group.userBookingsForThisTrip.sort((a, b) => a.seatName.localeCompare(b.seatName));
+            return group;
+        });
+        
+        finalGroupedTrips.sort((a, b) => 
+          new Date(b.userBookingsForThisTrip[0].tripDateTime).getTime() - new Date(a.userBookingsForThisTrip[0].tripDateTime).getTime()
+        );
+        setGroupedHistoryTrips(finalGroupedTrips);
 
       } else {
-        setHistoryTrips([]);
+        setGroupedHistoryTrips([]);
       }
     } catch (err) {
       console.error("Error fetching history trips:", err);
@@ -144,7 +223,7 @@ export default function MyTripsPage() {
         fetchHistoryTrips(user);
       } else {
         setCurrentUserAuth(null);
-        setIsLoading(false); // Not loading if no user
+        setIsLoading(false); 
         router.push('/auth/signin');
       }
     });
@@ -152,28 +231,25 @@ export default function MyTripsPage() {
   }, [router, fetchHistoryTrips]);
 
 
-  const handleInitiateCancellation = (clickedBooking: DisplayableHistoryTrip) => {
+  const handleInitiateCancellation = (tripGroup: GroupedDisplayableTrip) => {
     if (!currentUserAuth) return;
 
-    const activeBookingsForOriginalTrip = historyTrips.filter(
-      b => b.tripId === clickedBooking.tripId &&
-           b.status !== 'user-cancelled' &&
-           b.status !== 'system-cancelled' &&
-           b.currentTripStatusDisplay === 'قادمة' // Ensure original trip is upcoming
+    const activeBookingsForThisOriginalTrip = tripGroup.userBookingsForThisTrip.filter(
+      b => b.status !== 'user-cancelled' && b.status !== 'system-cancelled' && b.originalActualTripStatus === 'upcoming'
     );
     
-    setBookingsForCurrentCancellationScope(activeBookingsForOriginalTrip);
+    setBookingsForCurrentCancellationScope(activeBookingsForThisOriginalTrip);
 
-    if (activeBookingsForOriginalTrip.length === 0) {
-        toast({title: "لا يمكن الإلغاء", description: "هذا الحجز لم يعد فعالاً أو أن الرحلة لم تعد قادمة.", variant: "default"});
+    if (activeBookingsForThisOriginalTrip.length === 0) {
+        toast({title: "لا يمكن الإلغاء", description: "لا توجد حجوزات نشطة لهذه الرحلة أو أن الرحلة لم تعد قادمة.", variant: "default"});
         return;
     }
     
-    if (activeBookingsForOriginalTrip.length === 1) {
-      setSingleBookingToCancel(activeBookingsForOriginalTrip[0]);
+    if (activeBookingsForThisOriginalTrip.length === 1) {
+      setSingleBookingToCancel(activeBookingsForThisOriginalTrip[0]);
       setShowCancelSingleConfirmDialog(true);
     } else {
-      setSelectedBookingIdsInDialog([]); // Reset selection
+      setSelectedBookingIdsInDialog([]); 
       setShowCancelMultipleSeatsDialog(true);
     }
   };
@@ -188,7 +264,7 @@ export default function MyTripsPage() {
     for (const booking of bookingsToCancel) {
       try {
         const originalTripRef = ref(dbPrimary, `currentTrips/${booking.tripId}`);
-        await runTransaction(originalTripRef, (currentFirebaseTrip: FirebaseTrip | null) => {
+        await runTransaction(originalTripRef, (currentFirebaseTrip: FirebaseTrip | null): FirebaseTrip | undefined => {
           if (!currentFirebaseTrip) {
             throw new Error("الرحلة الأصلية غير موجودة.");
           }
@@ -196,33 +272,31 @@ export default function MyTripsPage() {
             throw new Error("لا يمكن إلغاء الحجز لرحلة ليست قادمة.");
           }
 
+          let seatUpdated = false;
           if (currentFirebaseTrip.offeredSeatsConfig) {
             const seatDetail = currentFirebaseTrip.offeredSeatsConfig[booking.seatId];
             if (typeof seatDetail === 'object' && seatDetail !== null && seatDetail.userId === currentUserAuth.uid) {
               currentFirebaseTrip.offeredSeatsConfig[booking.seatId] = true; // Mark as available
-            } else {
-              // Seat not booked by this user or already available
-              throw new Error(`المقعد ${booking.seatName} ليس محجوزاً بواسطتك أو أنه متاح بالفعل.`);
+              seatUpdated = true;
             }
-          } else if (currentFirebaseTrip.offeredSeatIds && currentFirebaseTrip.passengerDetails) {
-            // Fallback for older structure, ensure it's robust
+          } else if (currentFirebaseTrip.passengerDetails && currentFirebaseTrip.offeredSeatIds) {
             const passengerDetail = currentFirebaseTrip.passengerDetails[booking.seatId];
             if (passengerDetail && passengerDetail.userId === currentUserAuth.uid) {
               delete currentFirebaseTrip.passengerDetails[booking.seatId];
               if (!currentFirebaseTrip.offeredSeatIds.includes(booking.seatId)) {
                 currentFirebaseTrip.offeredSeatIds.push(booking.seatId);
               }
-            } else {
-              throw new Error(`المقعد ${booking.seatName} ليس محجوزاً بواسطتك أو أنه متاح بالفعل (IDs).`);
+              seatUpdated = true;
             }
-          } else {
-            throw new Error("تكوين مقاعد الرحلة الأصلية غير صالح.");
+          }
+          
+          if (!seatUpdated) {
+             throw new Error(`المقعد ${booking.seatName} ليس محجوزاً بواسطتك أو أن تكوين الرحلة غير صالح.`);
           }
           currentFirebaseTrip.updatedAt = Date.now();
           return currentFirebaseTrip;
         });
 
-        // If primary DB transaction succeeded, update history trip status in rider DB
         const historyTripRef = ref(dbRider, `historytrips/${currentUserAuth.uid}/${booking.bookingId}`);
         await firebaseSet(child(historyTripRef, 'status'), 'user-cancelled');
 
@@ -246,7 +320,7 @@ export default function MyTripsPage() {
         variant: "destructive"
       });
     }
-    fetchHistoryTrips(currentUserAuth); // Refresh the list
+    fetchHistoryTrips(currentUserAuth); 
   };
   
   const handleConfirmSingleCancellation = () => {
@@ -290,11 +364,10 @@ export default function MyTripsPage() {
             <p className="text-destructive text-lg">{error}</p>
             <Button onClick={() => currentUserAuth && fetchHistoryTrips(currentUserAuth)} className="mt-4">
                 حاول مرة أخرى
-            </Button>
-        </div>
+            </Button>        </div>
       )}
 
-      {!isLoading && !error && historyTrips.length === 0 && (
+      {!isLoading && !error && groupedHistoryTrips.length === 0 && (
         <div className="text-center py-10">
           <Frown className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
           <p className="text-muted-foreground text-xl">ليس لديك أي رحلات محفوظة.</p>
@@ -304,12 +377,12 @@ export default function MyTripsPage() {
         </div>
       )}
 
-      {!isLoading && !error && historyTrips.length > 0 && (
+      {!isLoading && !error && groupedHistoryTrips.length > 0 && (
         <div className="space-y-6">
-          {historyTrips.map((trip) => (
+          {groupedHistoryTrips.map((group) => (
             <HistoryTripCard 
-                key={trip.bookingId} 
-                trip={trip} 
+                key={group.originalTripId} 
+                tripGroup={group} 
                 onInitiateCancel={handleInitiateCancellation}
                 isProcessingCancellation={isProcessingCancellation}
             />
@@ -317,8 +390,11 @@ export default function MyTripsPage() {
         </div>
       )}
 
-        {/* Single Cancellation Confirmation Dialog */}
-        <AlertDialog open={showCancelSingleConfirmDialog} onOpenChange={setShowCancelSingleConfirmDialog}>
+        <AlertDialog open={showCancelSingleConfirmDialog} onOpenChange={(open) => {
+            if (isProcessingCancellation) return;
+            setShowCancelSingleConfirmDialog(open);
+            if(!open) setSingleBookingToCancel(null);
+        }}>
             <AlertDialogContent dir="rtl">
                 <AlertDialogHeader>
                 <AlertDialogTitle>تأكيد إلغاء الحجز</AlertDialogTitle>
@@ -340,7 +416,6 @@ export default function MyTripsPage() {
             </AlertDialogContent>
         </AlertDialog>
 
-        {/* Multiple Seats Cancellation Dialog */}
         <Dialog open={showCancelMultipleSeatsDialog} onOpenChange={(open) => {
             if (isProcessingCancellation) return;
             setShowCancelMultipleSeatsDialog(open);
@@ -367,12 +442,15 @@ export default function MyTripsPage() {
                                         checked ? [...prev, booking.bookingId] : prev.filter(id => id !== booking.bookingId)
                                     );
                                 }}
+                                disabled={booking.status === 'user-cancelled' || booking.status === 'system-cancelled' || booking.currentTripStatusDisplay !== 'قادمة'}
                             />
-                            <Label htmlFor={`cancel-${booking.bookingId}`} className="flex-1 cursor-pointer">
+                            <Label htmlFor={`cancel-${booking.bookingId}`} className={`flex-1 cursor-pointer ${ (booking.status === 'user-cancelled' || booking.status === 'system-cancelled' || booking.currentTripStatusDisplay !== 'قادمة') ? 'opacity-50 cursor-not-allowed' : ''}`}>
                                 <span className="font-medium">{booking.seatName}</span>
                                 <span className="text-xs text-muted-foreground block">
-                                    (رحلة من {booking.departureCityDisplay} إلى {booking.arrivalCityDisplay} في {booking.tripDateDisplay})
+                                    (رحلة من {booking.departureCityDisplay} إلى {booking.arrivalCityDisplay} في {booking.tripDateDisplay}) - {booking.currentTripStatusDisplay}
                                 </span>
+                                {(booking.status === 'user-cancelled' || booking.status === 'system-cancelled' || booking.currentTripStatusDisplay !== 'قادمة') && 
+                                  <span className="text-xs text-destructive block">لا يمكن إلغاء هذا المقعد</span>}
                             </Label>
                         </div>
                     ))}

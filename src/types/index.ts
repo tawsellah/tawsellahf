@@ -9,16 +9,16 @@ export interface FirebaseTrip {
   id: string;
   meetingPoint?: string;
   notes?: string;
-  offeredSeatIds?: string[]; // For trips where seats are just a list of available IDs
-  offeredSeatsConfig?: { // For trips with detailed seat configuration
-    [seatId: string]: boolean | { userId: string; phone: string; bookedAt: number }; // true if available, object if booked
+  offeredSeatIds?: string[]; 
+  offeredSeatsConfig?: { 
+    [seatId: string]: boolean | { userId: string; phone: string; bookedAt: number }; 
   };
   pricePerPassenger: number;
   startPoint: string;
   status: 'upcoming' | 'ongoing' | 'completed' | 'cancelled';
   stops?: string[];
   updatedAt?: number;
-  passengerDetails?: { // Used if offeredSeatIds is present, maps seatId to booking details
+  passengerDetails?: { 
     [seatId: string]: {
       userId: string;
       phone: string;
@@ -31,7 +31,7 @@ export interface FirebaseUser {
   createdAt: number;
   email: string;
   fullName: string;
-  id: string; // This is the UID from Firebase Auth
+  id: string; 
   idNumber?: string;
   idPhotoUrl?: string;
   licenseExpiry?: string;
@@ -42,8 +42,8 @@ export interface FirebaseUser {
     click?: boolean;
     clickCode?: string;
   };
-  phone?: string; // User's phone number (used in tawsellah3 users node)
-  phoneNumber?: string; // User's phone number (used in tawsellah-rider users node)
+  phone?: string; 
+  phoneNumber?: string; 
   rating?: number;
   tripsCount?: number;
   vehicleColor?: string;
@@ -56,7 +56,7 @@ export interface FirebaseUser {
 
 export interface Trip {
   id: string;
-  firebaseTripData: FirebaseTrip; // Original Firebase trip data
+  firebaseTripData: FirebaseTrip; 
   driver: {
     id: string;
     name: string;
@@ -68,21 +68,21 @@ export interface Trip {
     carColorName?: string;
     clickCode?: string;
   };
-  car: { // Simplified car details, often derived from driver
-    name: string; // vehicleMakeModel
-    color: string; // vehicleColor
+  car: { 
+    name: string; 
+    color: string; 
     colorName?: string;
   };
-  date: string; // Formatted date for display
-  departureTime: string; // Formatted time for display
-  arrivalTime: string; // Formatted or direct from firebaseTripData.expectedArrivalTime
-  price: number; // pricePerPassenger
-  startPoint: string; // Formatted start point for display (Arabic name)
-  endPoint: string; // Formatted end point for display (Arabic name)
+  date: string; 
+  departureTime: string; 
+  arrivalTime: string; 
+  price: number; 
+  startPoint: string; 
+  endPoint: string; 
   meetingPoint?: string;
   notes?: string;
-  status: FirebaseTrip['status']; // Original status
-  seats: Seat[]; // Processed seat list for UI interaction
+  status: FirebaseTrip['status']; 
+  seats: Seat[]; 
 }
 
 export type SeatStatus = 'available' | 'selected' | 'taken' | 'driver';
@@ -93,34 +93,32 @@ export interface Seat {
   status: SeatStatus;
   row: 'front' | 'rear' | 'driver';
   position: number;
-  price?: number; // Usually trip.price is used per seat
-  bookedBy?: { userId: string; phone: string; bookedAt?: number }; // Include bookedAt if available
+  price?: number; 
+  bookedBy?: { userId: string; phone: string; bookedAt?: number }; 
 }
 
-// For storing trip history in "tawsellah-rider" database for a specific user
 export interface StoredHistoryTrip {
-  bookingId: string;        // Unique ID for this specific seat booking
-  tripId: string;           // ID of the original trip from currentTrips (tawsellah3)
+  bookingId: string;        
+  tripId: string;           
   seatId: string;
   seatName: string;
   tripPrice: number;
-  tripDateTime: string;     // ISO string from original trip's dateTime
-  departureCityValue: string; // e.g. 'amman'
-  arrivalCityValue: string;   // e.g. 'irbid'
-  driverId: string;         // Snapshot from original trip
-  driverNameSnapshot: string; // Snapshot of driver's name at booking
-  bookedAt: number;         // Timestamp of booking
-  userId: string;           // UID of the user who booked
-  status?: 'booked' | 'user-cancelled' | 'system-cancelled'; // Status of this specific booking
+  tripDateTime: string;     
+  departureCityValue: string; 
+  arrivalCityValue: string;   
+  driverId: string;         
+  driverNameSnapshot: string; 
+  bookedAt: number;         
+  userId: string;           
+  status?: 'booked' | 'user-cancelled' | 'system-cancelled'; 
 }
 
-// Type for displaying trips in "My Trips" page, combining StoredHistoryTrip and live original trip data
 export interface DisplayableHistoryTrip extends StoredHistoryTrip {
   tripDateDisplay: string;
   tripTimeDisplay: string;
   dayOfWeekDisplay: string;
-  departureCityDisplay: string; // Arabic name
-  arrivalCityDisplay: string;   // Arabic name
+  departureCityDisplay: string; 
+  arrivalCityDisplay: string;   
   currentTripStatusDisplay: 
     | 'مكتملة' 
     | 'حالية' 
@@ -130,4 +128,28 @@ export interface DisplayableHistoryTrip extends StoredHistoryTrip {
     | 'ملغاة (النظام)'
     | 'مؤرشفة (غير معروفة)';
   originalTripExists: boolean;
+  // This field represents the status of the *original* trip in currentTrips
+  // to help determine if the overall trip is upcoming, cancelled, etc.
+  originalActualTripStatus?: FirebaseTrip['status']; 
+}
+
+export interface GroupedDisplayableTrip {
+  originalTripId: string;
+  tripDateDisplay: string;
+  tripTimeDisplay: string;
+  dayOfWeekDisplay: string;
+  departureCityDisplay: string;
+  arrivalCityDisplay: string;
+  driverNameSnapshot: string;
+  overallTripStatusForCancellationLogic: FirebaseTrip['status'] | 'unknown'; // Status of original trip from currentTrips
+  originalTripExists: boolean;
+  userBookingsForThisTrip: DisplayableHistoryTrip[]; // All user's bookings for this originalTripId
+  // Display a consolidated status for the card header badge
+  cardHeaderStatusDisplay: 
+    | 'قادمة'
+    | 'مكتملة'
+    | 'ملغاة'
+    | 'متعدد الحالات' // If bookings have mixed statuses like some cancelled, some active
+    | 'مؤرشفة';
+  canCancelAnyBookingInGroup: boolean; // True if original trip is upcoming and user has at least one active booking in this group
 }
