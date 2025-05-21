@@ -3,7 +3,7 @@
 
 import type { DisplayableHistoryTrip, GroupedDisplayableTrip } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'; 
-import { CalendarDays, Clock, DollarSign, MapPin, ChevronLeft, Tag, Car, User, CheckCircle, XCircle, AlertTriangle, RefreshCwIcon, Ban, Users } from 'lucide-react';
+import { CalendarDays, Clock, DollarSign, MapPin, ChevronLeft, Car, User, CheckCircle, XCircle, AlertTriangle, RefreshCwIcon, Ban, Users, Info } from 'lucide-react'; // Added Info
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -46,6 +46,11 @@ export function HistoryTripCard({ tripGroup, onInitiateCancel, isProcessingCance
     .filter(b => b.status !== 'user-cancelled' && b.status !== 'system-cancelled')
     .reduce((sum, b) => sum + b.tripPrice, 0);
 
+  // Determine if the cancel button should be enabled
+  // It should be enabled if the original trip is 'upcoming' AND there's at least one booking
+  // by the user for this trip that is currently 'booked' (not user-cancelled or system-cancelled).
+  const canCancel = tripGroup.canCancelAnyBookingInGroup;
+
   return (
     <Card className="overflow-hidden shadow-lg transition-all duration-300 ease-in-out hover:shadow-xl">
       <CardHeader className="p-4 bg-muted/30">
@@ -87,7 +92,7 @@ export function HistoryTripCard({ tripGroup, onInitiateCancel, isProcessingCance
           <span>السائق: {tripGroup.driverNameSnapshot}</span>
         </div>
       </CardContent>
-      {tripGroup.canCancelAnyBookingInGroup && (
+      {canCancel && (
         <CardFooter className="p-4 flex items-center justify-end bg-muted/50">
           <Button
             variant="destructive"
@@ -103,3 +108,4 @@ export function HistoryTripCard({ tripGroup, onInitiateCancel, isProcessingCance
     </Card>
   );
 }
+
