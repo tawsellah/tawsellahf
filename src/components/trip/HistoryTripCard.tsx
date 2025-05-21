@@ -2,7 +2,7 @@
 "use client";
 
 import type { DisplayableHistoryTrip } from '@/types';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'; // Added CardFooter
 import { CalendarDays, Clock, DollarSign, MapPin, ChevronLeft, Tag, Car, User, CheckCircle, XCircle, AlertTriangle, RefreshCwIcon, Ban } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -37,7 +37,9 @@ const statusIcons: Record<DisplayableHistoryTrip['currentTripStatusDisplay'], Re
 
 export function HistoryTripCard({ trip, onInitiateCancel, isProcessingCancellation }: HistoryTripCardProps) {
   const StatusIcon = statusIcons[trip.currentTripStatusDisplay] || AlertTriangle;
-  const canCancel = trip.currentTripStatusDisplay === 'قادمة' && trip.status !== 'user-cancelled' && trip.status !== 'system-cancelled';
+  const canCancel = trip.currentTripStatusDisplay === 'قادمة' && 
+                    trip.status !== 'user-cancelled' && 
+                    trip.status !== 'system-cancelled';
 
   return (
     <Card className="overflow-hidden shadow-lg transition-all duration-300 ease-in-out hover:shadow-xl">
