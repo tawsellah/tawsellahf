@@ -205,13 +205,14 @@ export default function TripDetailsPage() {
 
   const processBooking = async (paymentType: 'cash' | 'click') => {
     const currentUser = authRider.currentUser;
-     if (!trip) {
-        toast({ title: "خطأ في الحجز", description: "بيانات الرحلة غير متوفرة.", variant: "destructive" });
-        return;
+
+    if (!trip) {
+      toast({ title: "خطأ في الحجز", description: "بيانات الرحلة غير متوفرة.", variant: "destructive" });
+      return;
     }
     if (!currentUser) {
-        toast({ title: "خطأ في الحجز", description: "المستخدم غير مسجل الدخول.", variant: "destructive" });
-        return;
+      toast({ title: "خطأ في الحجز", description: "المستخدم غير مسجل الدخول.", variant: "destructive" });
+      return;
     }
     if (selectedSeats.length === 0) {
       toast({ title: "خطأ", description: 'الرجاء اختيار مقعد واحد على الأقل.', variant: "destructive" });
@@ -219,10 +220,10 @@ export default function TripDetailsPage() {
     }
     
     setIsBooking(true); 
-    const currentTripId = trip.id; 
+    const currentTripId = trip.id; // Use trip.id from state
     
     let userPhoneNumber = '';
-    let userId = currentUser.uid;
+    const userId = currentUser.uid;
 
     try {
         const userRef = ref(dbRider, `users/${userId}`);
@@ -319,6 +320,7 @@ export default function TripDetailsPage() {
               driverNameSnapshot: trip.driver.name,
               bookedAt: bookedAtTimestamp,
               userId: userId,
+              status: 'booked', // Initial status
             };
             await firebaseSet(newBookingRef, historyTripData);
           }
@@ -326,7 +328,7 @@ export default function TripDetailsPage() {
       }
       
       const updatedUiSeats = trip.seats.map(seat => 
-        selectedSeats.includes(seat.id) ? { ...seat, status: 'taken' as SeatType['status'], bookedBy: { userId, phone: userPhoneNumber } } : seat
+        selectedSeats.includes(seat.id) ? { ...seat, status: 'taken' as SeatType['status'], bookedBy: bookingDetailsForDB } : seat
       );
       
       setTrip(currentTripUiState => {
@@ -369,31 +371,39 @@ export default function TripDetailsPage() {
       router.push('/'); 
 
     } catch (error: any) {
+      const tripIdForLog = trip?.id || 'N/A';
+      const userIdForLog = currentUser?.uid || 'N/A';
       let handled = false;
       const errorMessage = error?.message || "خطأ غير معروف";
       
-      // Log the raw error object for better debugging in the browser console
-      console.error(
-        `processBooking - Error for trip ${currentTripId}, user ${userId}, seats ${selectedSeats.join(', ')}. Raw error:`,
-        error
-      );
-      
       if (errorMessage === "Trip data not found in transaction.") {
+        console.warn(
+          `HANDLED: Transaction failed for trip ${tripIdForLog} because trip data was not found. User ${userIdForLog}, seats ${selectedSeats.join(', ')}. This is expected if the trip was deleted concurrently. Error:`,
+          error
+        );
         toast({ title: "خطأ في الحجز", description: "لم نتمكن من إكمال الحجز. هذه الرحلة لم تعد متوفرة أو تم حذفها.", variant: "destructive"});
         handled = true;
       } else if (errorMessage.startsWith("المقعد") || errorMessage.startsWith("واحد أو أكثر") || errorMessage.startsWith("هذه الرحلة لم تعد متاحة") || errorMessage.startsWith("لم يتم العثور على تكوين المقاعد")) {
+        console.warn(
+          `HANDLED: Business logic error during booking for trip ${tripIdForLog}. User ${userIdForLog}, seats ${selectedSeats.join(', ')}. Message: ${errorMessage}. Error:`,
+          error
+        );
         toast({ title: "خطأ في الحجز", description: errorMessage, variant: "destructive"});
         handled = true;
       }
       
       if (!handled) {
+        console.error(
+          `UNEXPECTED Error in processBooking for trip ${tripIdForLog}, user ${userIdForLog}, seats ${selectedSeats.join(', ')}:`,
+          error
+        );
         toast({ title: "خطأ في الحجز", description: "لم نتمكن من إكمال الحجز. قد تكون المقاعد قد حُجزت أو أن الرحلة لم تعد متاحة. الرجاء المحاولة مرة أخرى.", variant: "destructive"});
       }
       
       try {
         await fetchTripDetails(); 
       } catch (fetchError) {
-        console.error("Error refetching trip details after booking failure:", fetchError);
+        console.error(`processBooking - Error refetching trip details after booking failure for trip ${tripIdForLog}:`, fetchError);
       }
     } finally {
         setIsBooking(false);
@@ -566,3 +576,5 @@ export default function TripDetailsPage() {
   );
 }
 
+
+    
