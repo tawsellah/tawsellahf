@@ -76,16 +76,21 @@ export function generateSeatsFromTripData(tripData: FirebaseTrip): Seat[] {
   if (tripData.offeredSeatsConfig) {
     passengerSeatLayouts.forEach(layoutSeat => {
       const seatBookingInfo = tripData.offeredSeatsConfig![layoutSeat.id];
-      let currentStatus: SeatStatus = 'taken'; 
-      let bookedByDetails;
+      let currentStatus: SeatStatus = 'taken';
+      let bookedByDetails: Seat['bookedBy'] | undefined;
 
       if (seatBookingInfo === true) {
         currentStatus = 'available';
       } else if (typeof seatBookingInfo === 'object' && seatBookingInfo !== null && 'userId' in seatBookingInfo) {
         currentStatus = 'taken';
-        bookedByDetails = { userId: seatBookingInfo.userId, phone: seatBookingInfo.phone };
+        bookedByDetails = { 
+            userId: seatBookingInfo.userId, 
+            phone: seatBookingInfo.phone, 
+            fullName: seatBookingInfo.fullName, 
+            bookedAt: seatBookingInfo.bookedAt 
+        };
       }
-      
+
       seats.push({
         ...layoutSeat,
         status: currentStatus,
@@ -95,10 +100,15 @@ export function generateSeatsFromTripData(tripData: FirebaseTrip): Seat[] {
   } else if (tripData.offeredSeatIds) {
     passengerSeatLayouts.forEach(layoutSeat => {
       const isAvailable = tripData.offeredSeatIds!.includes(layoutSeat.id);
-      let bookedByDetails;
+      let bookedByDetails: Seat['bookedBy'] | undefined;
       if (!isAvailable && tripData.passengerDetails && tripData.passengerDetails[layoutSeat.id]) {
           const details = tripData.passengerDetails[layoutSeat.id];
-          bookedByDetails = { userId: details.userId, phone: details.phone };
+          bookedByDetails = { 
+            userId: details.userId, 
+            phone: details.phone,
+            fullName: details.fullName,
+            bookedAt: details.bookedAt
+          };
       }
       seats.push({
         ...layoutSeat,
@@ -107,17 +117,18 @@ export function generateSeatsFromTripData(tripData: FirebaseTrip): Seat[] {
       });
     });
   } else {
+    // Fallback if neither offeredSeatsConfig nor offeredSeatIds is present
     passengerSeatLayouts.forEach(layoutSeat => {
-      seats.push({ ...layoutSeat, status: 'taken' });
+      seats.push({ ...layoutSeat, status: 'taken' }); // Or 'unavailable' or handle as error
     });
   }
 
+  // Sort seats: driver first, then front, then rear, then by position
   return seats.sort((a, b) => {
-    if (a.row === b.row) return a.position - b.position;
-    if (a.row === 'driver') return -1;
-    if (b.row === 'driver') return 1;
-    if (a.row === 'front') return -1;
-    if (b.row === 'front') return 1;
-    return 0; 
+    const rowOrder = { driver: 0, front: 1, rear: 2 };
+    if (rowOrder[a.row] !== rowOrder[b.row]) {
+      return rowOrder[a.row] - rowOrder[b.row];
+    }
+    return a.position - b.position;
   });
 }
