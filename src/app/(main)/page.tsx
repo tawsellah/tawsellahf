@@ -11,7 +11,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import type { Trip, FirebaseTrip, FirebaseUser } from '@/types';
 import { TripCard } from '@/components/trip/TripCard';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { dbPrimary } from '@/lib/firebase'; 
 import { ref, get } from 'firebase/database';
 import { jordanianGovernorates, formatTimeToArabicAMPM, formatDateToArabic, generateSeatsFromTripData, getGovernorateDisplayNameAr } from '@/lib/constants';
@@ -40,6 +40,7 @@ export default function TripSearchPage() {
   const onSubmit = async (data: SearchFormData) => {
     form.clearErrors();
     setSearchResults([]);
+    // Ensure departureTime is correctly set if it's from form state
     form.setValue('departureTime', data.departureTime); 
 
     try {
@@ -56,12 +57,17 @@ export default function TripSearchPage() {
         for (const tripId in allTripsData) {
           const fbTrip = allTripsData[tripId];
           
-          if (fbTrip.startPoint?.toLowerCase() === data.startPoint.toLowerCase() &&
-              fbTrip.destination?.toLowerCase() === data.endPoint.toLowerCase() && // Match against destination
+          // Ensure fbTrip.startPoint and fbTrip.destination are defined and are strings
+          const tripStartPoint = fbTrip.startPoint || "";
+          const tripDestination = fbTrip.destination || "";
+
+          if (tripStartPoint.toLowerCase() === data.startPoint.toLowerCase() &&
+              tripDestination.toLowerCase() === data.endPoint.toLowerCase() &&
               fbTrip.status === 'upcoming') { 
             
             const tripDepartureDateTime = new Date(fbTrip.dateTime); 
             
+            // Compare year, month, day, hour, and minute
             if (tripDepartureDateTime.getFullYear() === formDepartureDateTime.getFullYear() &&
                 tripDepartureDateTime.getMonth() === formDepartureDateTime.getMonth() &&
                 tripDepartureDateTime.getDate() === formDepartureDateTime.getDate() &&
@@ -101,15 +107,15 @@ export default function TripSearchPage() {
                 departureTime: formatTimeToArabicAMPM(fbTrip.dateTime),
                 arrivalTime: fbTrip.expectedArrivalTime || "غير محدد", 
                 price: fbTrip.pricePerPassenger,
-                startPoint: getGovernorateDisplayNameAr(fbTrip.startPoint), // Display Arabic name
-                endPoint: getGovernorateDisplayNameAr(fbTrip.destination), // Display Arabic name for destination
+                startPoint: getGovernorateDisplayNameAr(fbTrip.startPoint || ""), 
+                endPoint: getGovernorateDisplayNameAr(fbTrip.destination || ""), 
                 meetingPoint: fbTrip.meetingPoint,
                 notes: fbTrip.notes,
                 status: fbTrip.status,
                 seats: generateSeatsFromTripData(fbTrip), 
               });
             } else {
-              console.warn(`Driver data not found for driverId: ${fbTrip.driverId} in tawsellah3. User might be in tawsellah-rider or data is missing.`);
+              console.warn(`Driver data not found for driverId: ${fbTrip.driverId}. User might be in tawsellah-rider or data is missing.`);
             }
           }
           setSearchResults(enrichedTrips);
@@ -174,9 +180,18 @@ export default function TripSearchPage() {
                   <Flag className="h-5 w-5 text-primary" />
                   نقطة الوصول
                 </FormLabel>
-                <FormControl>
-                  <Input placeholder="مثال: الزرقاء" {...field} />
-                </FormControl>
+                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="اختر نقطة الوصول" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {jordanianGovernorates.map(gov => (
+                      <SelectItem key={`end-${gov.value}`} value={gov.value}>{gov.displayNameAr}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <FormMessage />
               </FormItem>
             )}
