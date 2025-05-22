@@ -4,8 +4,8 @@
 import { Search, MapPin, Flag, Clock, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Input } from '@/components/ui/input';
+import { Input as ShadInput } from '@/components/ui/input'; // Renamed to avoid conflict
+import DropdownSearch from '@/components/DropdownSearch'; // Import the new component
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -14,7 +14,8 @@ import { TripCard } from '@/components/trip/TripCard';
 import { useState, useEffect } from 'react';
 import { dbPrimary } from '@/lib/firebase'; 
 import { ref, get } from 'firebase/database';
-import { jordanianGovernorates, formatTimeToArabicAMPM, formatDateToArabic, generateSeatsFromTripData, getGovernorateDisplayNameAr } from '@/lib/constants';
+import { jordanianGovernorates as governorateDataForConstants } from '@/lib/constants'; // Keep for getGovernorateDisplayNameAr
+import { formatTimeToArabicAMPM, formatDateToArabic, generateSeatsFromTripData, getGovernorateDisplayNameAr } from '@/lib/constants';
 import { useToast } from '@/hooks/use-toast';
 
 const searchSchema = z.object({
@@ -40,7 +41,6 @@ export default function TripSearchPage() {
   const onSubmit = async (data: SearchFormData) => {
     form.clearErrors();
     setSearchResults([]);
-    // Ensure departureTime is correctly set if it's from form state
     form.setValue('departureTime', data.departureTime); 
 
     try {
@@ -57,7 +57,6 @@ export default function TripSearchPage() {
         for (const tripId in allTripsData) {
           const fbTrip = allTripsData[tripId];
           
-          // Ensure fbTrip.startPoint and fbTrip.destination are defined and are strings
           const tripStartPoint = fbTrip.startPoint || "";
           const tripDestination = fbTrip.destination || "";
 
@@ -67,7 +66,6 @@ export default function TripSearchPage() {
             
             const tripDepartureDateTime = new Date(fbTrip.dateTime); 
             
-            // Compare year, month, day, hour, and minute
             if (tripDepartureDateTime.getFullYear() === formDepartureDateTime.getFullYear() &&
                 tripDepartureDateTime.getMonth() === formDepartureDateTime.getMonth() &&
                 tripDepartureDateTime.getDate() === formDepartureDateTime.getDate() &&
@@ -154,18 +152,18 @@ export default function TripSearchPage() {
                   <MapPin className="h-5 w-5 text-primary" />
                   نقطة الانطلاق
                 </FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="اختر نقطة الانطلاق" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {jordanianGovernorates.map(gov => (
-                      <SelectItem key={`start-${gov.value}`} value={gov.value}>{gov.displayNameAr}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <FormControl>
+                  <DropdownSearch
+                    label="" // Label is handled by FormLabel
+                    icon={<MapPin className="h-5 w-5 text-primary opacity-0" />} // Placeholder for icon positioning, actual icon in FormLabel
+                    placeholder="اختر محافظة الانطلاق"
+                    onSelect={field.onChange}
+                    selectedValue={field.value}
+                    dir="rtl"
+                    formItemId={field.name} // For associating with FormLabel if needed
+                    error={!!form.formState.errors.startPoint}
+                  />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}
@@ -180,18 +178,18 @@ export default function TripSearchPage() {
                   <Flag className="h-5 w-5 text-primary" />
                   نقطة الوصول
                 </FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="اختر نقطة الوصول" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {jordanianGovernorates.map(gov => (
-                      <SelectItem key={`end-${gov.value}`} value={gov.value}>{gov.displayNameAr}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <FormControl>
+                  <DropdownSearch
+                    label="" // Label is handled by FormLabel
+                    icon={<Flag className="h-5 w-5 text-primary opacity-0" />} // Placeholder for icon positioning
+                    placeholder="اختر محافظة الوصول"
+                    onSelect={field.onChange}
+                    selectedValue={field.value}
+                    dir="rtl"
+                    formItemId={field.name}
+                    error={!!form.formState.errors.endPoint}
+                  />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}
@@ -207,7 +205,7 @@ export default function TripSearchPage() {
                   وقت وتاريخ الانطلاق
                 </FormLabel>
                 <FormControl>
-                  <Input type="datetime-local" {...field} />
+                  <ShadInput type="datetime-local" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>

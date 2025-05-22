@@ -1,0 +1,153 @@
+
+.formGroup {
+  margin-bottom: 15px;
+  position: relative;
+}
+
+.label {
+  display: block;
+  margin-bottom: 6px;
+  /* color: #34495e; */
+  color: hsl(var(--foreground)); /* Adapted to ShadCN theme */
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.darkMode .label {
+  /* color: #cccccc; */
+  color: hsl(var(--foreground)); /* Adapted to ShadCN theme */
+}
+
+.inputIcon {
+  position: relative;
+}
+
+.inputIcon svg {
+  position: absolute;
+  right: 12px; /* Adjusted for RTL */
+  left: auto;
+  top: 50%;
+  transform: translateY(-50%);
+  /* color: #7f8c8d; */
+  color: hsl(var(--muted-foreground)); /* Adapted to ShadCN theme */
+}
+
+.input {
+  width: 100%;
+  padding: 12px 15px;
+  padding-left: 15px; /* Adjusted for RTL */
+  padding-right: 40px; /* Adjusted for RTL icon */
+  border: 1px solid hsl(var(--input)); /* Adapted to ShadCN theme */
+  border-radius: var(--radius); /* Adapted to ShadCN theme */
+  font-size: 14px;
+  transition: all 0.3s;
+  background: hsl(var(--background)); /* Adapted to ShadCN theme */
+  color: hsl(var(--foreground)); /* Added for text color */
+  cursor: pointer;
+}
+
+.darkMode .input {
+  background: hsl(var(--background)); /* ShadCN handles dark mode for background */
+  border-color: hsl(var(--input));   /* ShadCN handles dark mode for input border */
+  color: hsl(var(--foreground));    /* ShadCN handles dark mode for foreground */
+}
+
+.input:focus {
+  border-color: hsl(var(--ring)); /* Adapted to ShadCN theme */
+  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.2); /* Adapted to ShadCN theme */
+  outline: none;
+  background: hsl(var(--background)); /* Adapted to ShadCN theme */
+}
+
+.darkMode .input:focus {
+  background: hsl(var(--background));
+}
+
+.dropdownMenu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: hsl(var(--popover)); /* Adapted to ShadCN theme */
+  border: 1px solid hsl(var(--border)); /* Adapted to ShadCN theme */
+  border-radius: var(--radius); /* Adapted to ShadCN theme */
+  max-height: 250px;
+  overflow-y: auto;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  display: none;
+}
+
+.darkMode .dropdownMenu {
+  background: hsl(var(--popover)); /* ShadCN handles dark mode for popover */
+  border-color: hsl(var(--border)); /* ShadCN handles dark mode for border */
+}
+
+.dropdownMenu.active {
+  display: block;
+}
+
+.searchBox {
+  padding: 10px;
+  border-bottom: 1px solid hsl(var(--border)); /* Adapted to ShadCN theme */
+  position: sticky;
+  top: 0;
+  background: hsl(var(--popover)); /* Adapted to ShadCN theme */
+  z-index: 1; /* Ensure search box is above items */
+}
+
+.darkMode .searchBox {
+  background: hsl(var(--popover));
+  border-color: hsl(var(--border));
+}
+
+.searchBox input {
+  padding: 8px 12px;
+  width: 100%;
+  border: 1px solid hsl(var(--input)); /* Adapted to ShadCN theme */
+  border-radius: calc(var(--radius) - 2px); /* ShadCN sm radius */
+  background-color: hsl(var(--background)); /* Added for input background */
+  color: hsl(var(--foreground)); /* Added for input text color */
+}
+
+.darkMode .searchBox input {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  border-color: hsl(var(--input));
+}
+
+.dropdownItems {
+  padding: 5px 0;
+}
+
+.dropdownItem {
+  padding: 10px 15px;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: hsl(var(--popover-foreground)); /* Adapted */
+  text-align: right; /* Ensure RTL text alignment */
+}
+
+.darkMode .dropdownItem {
+  color: hsl(var(--popover-foreground)); /* Adapted */
+}
+
+.dropdownItem:hover {
+  background: hsl(var(--accent)); /* Adapted to ShadCN theme */
+  color: hsl(var(--accent-foreground)); /* Adapted */
+}
+
+.darkMode .dropdownItem:hover {
+  background: hsl(var(--accent)); /* Adapted */
+  color: hsl(var(--accent-foreground)); /* Adapted */
+}
+
+.dropdownItem.selected {
+  background: hsl(var(--primary)); /* Adapted to ShadCN theme */
+  color: hsl(var(--primary-foreground)); /* Adapted */
+}
+
+.darkMode .dropdownItem.selected {
+  background: hsl(var(--primary)); /* Adapted */
+  color: hsl(var(--primary-foreground)); /* Adapted */
+}
