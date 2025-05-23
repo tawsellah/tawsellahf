@@ -21,7 +21,9 @@ export const jordanianGovernorates: { value: string; displayNameAr: string; disp
   { value: 'karak', displayNameAr: 'الكرك', displayNameEn: 'Karak' },
   { value: 'maan', displayNameAr: 'معان', displayNameEn: 'Maan' },
   { value: 'ajloun', displayNameAr: 'عجلون', displayNameEn: 'Ajloun' },
-  { value: 'tafilah', displayNameAr: 'الطفيلة', displayNameEn: 'Tafilah' }
+  { value: 'tafilah', displayNameAr: 'الطفيلة', displayNameEn: 'Tafilah' },
+  { value: "north_ghor", displayNameAr: "الأغوار الشمالية", displayNameEn: "Northern Valleys" },
+  { value: "south_ghor", displayNameAr: "الأغوار الجنوبية", displayNameEn: "Southern Valleys" },
 ];
 
 export function getGovernorateDisplayNameAr(value: string): string {
@@ -76,20 +78,21 @@ export function generateSeatsFromTripData(tripData: FirebaseTrip): Seat[] {
   if (tripData.offeredSeatsConfig) {
     passengerSeatLayouts.forEach(layoutSeat => {
       const seatBookingInfo = tripData.offeredSeatsConfig![layoutSeat.id];
-      let currentStatus: SeatStatus = 'taken';
+      let currentStatus: SeatStatus = 'taken'; // Default to taken if not explicitly available
       let bookedByDetails: Seat['bookedBy'] | undefined;
 
-      if (seatBookingInfo === true) {
+      if (seatBookingInfo === true) { // Seat is explicitly available
         currentStatus = 'available';
-      } else if (typeof seatBookingInfo === 'object' && seatBookingInfo !== null && 'userId' in seatBookingInfo) {
+      } else if (typeof seatBookingInfo === 'object' && seatBookingInfo !== null && 'userId' in seatBookingInfo) { // Seat is booked
         currentStatus = 'taken';
-        bookedByDetails = { 
-            userId: seatBookingInfo.userId, 
-            phone: seatBookingInfo.phone, 
-            fullName: seatBookingInfo.fullName, 
-            bookedAt: seatBookingInfo.bookedAt 
+        bookedByDetails = {
+            userId: seatBookingInfo.userId,
+            phone: seatBookingInfo.phone,
+            fullName: seatBookingInfo.fullName,
+            bookedAt: seatBookingInfo.bookedAt
         };
       }
+      // If seatBookingInfo is false or any other value, it's considered taken without specific user details for this function's scope.
 
       seats.push({
         ...layoutSeat,
@@ -97,14 +100,14 @@ export function generateSeatsFromTripData(tripData: FirebaseTrip): Seat[] {
         bookedBy: bookedByDetails,
       });
     });
-  } else if (tripData.offeredSeatIds) {
+  } else if (tripData.offeredSeatIds) { // Fallback to offeredSeatIds if offeredSeatsConfig is not present
     passengerSeatLayouts.forEach(layoutSeat => {
       const isAvailable = tripData.offeredSeatIds!.includes(layoutSeat.id);
       let bookedByDetails: Seat['bookedBy'] | undefined;
       if (!isAvailable && tripData.passengerDetails && tripData.passengerDetails[layoutSeat.id]) {
           const details = tripData.passengerDetails[layoutSeat.id];
-          bookedByDetails = { 
-            userId: details.userId, 
+          bookedByDetails = {
+            userId: details.userId,
             phone: details.phone,
             fullName: details.fullName,
             bookedAt: details.bookedAt
@@ -118,8 +121,9 @@ export function generateSeatsFromTripData(tripData: FirebaseTrip): Seat[] {
     });
   } else {
     // Fallback if neither offeredSeatsConfig nor offeredSeatIds is present
+    // Consider all passenger seats as 'taken' or 'unavailable' by default
     passengerSeatLayouts.forEach(layoutSeat => {
-      seats.push({ ...layoutSeat, status: 'taken' }); // Or 'unavailable' or handle as error
+      seats.push({ ...layoutSeat, status: 'taken' });
     });
   }
 
@@ -131,4 +135,9 @@ export function generateSeatsFromTripData(tripData: FirebaseTrip): Seat[] {
     }
     return a.position - b.position;
   });
+}
+
+export function capitalizeFirstLetter(string: string): string {
+  if (!string) return string;
+  return string.charAt(0).toUpperCase() + string.slice(1);
 }
