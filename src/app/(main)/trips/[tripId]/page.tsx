@@ -43,7 +43,7 @@ export default function TripDetailsPage() {
     setSelectedSeats([]);
     setCurrentPaymentSelectionInDialog(null);
     setIsCheckingTripStatus(false);
-    console.log(`Fetching details for tripId: ${tripIdFromParams}`);
+    // console.log(`Fetching details for tripId: ${tripIdFromParams}`);
 
     if (!tripIdFromParams) {
         toast({ title: "خطأ", description: "معرّف الرحلة غير موجود.", variant: "destructive" });
@@ -57,7 +57,7 @@ export default function TripDetailsPage() {
 
       if (tripSnapshot.exists()) {
         const fbTrip = tripSnapshot.val() as FirebaseTripType;
-        console.log("Fetched fbTrip from currentTrips:", fbTrip);
+        // console.log("Fetched fbTrip from currentTrips:", fbTrip);
 
         const driverSnapshot = await get(ref(dbPrimary, `users/${fbTrip.driverId}`));
 
@@ -98,30 +98,30 @@ export default function TripDetailsPage() {
           };
           setActualClickCode(enrichedTrip.driver.clickCode || CLICK_PAYMENT_CODE_PLACEHOLDER);
 
-          console.log("Raw fbTrip.startPoint from currentTrips:", fbTrip.startPoint);
-          console.log("Raw fbTrip.destination from currentTrips:", fbTrip.destination);
+          // console.log("Raw fbTrip.startPoint from currentTrips:", fbTrip.startPoint);
+          // console.log("Raw fbTrip.destination from currentTrips:", fbTrip.destination);
 
           if (fbTrip.startPoint && fbTrip.destination) {
             const capitalizedStartPoint = capitalizeFirstLetter(fbTrip.startPoint);
             const capitalizedDestination = capitalizeFirstLetter(fbTrip.destination);
             const stopStationsPathKey = `${capitalizedStartPoint} to ${capitalizedDestination}`;
           
-            console.log(`Attempting to fetch stops for key: stopstations/${stopStationsPathKey}`);
+            // console.log(`Attempting to fetch stops for key: stopstations/${stopStationsPathKey}`);
           
             try {
               const stopsRefFirebase = ref(dbPrimary, `stopstations/${stopStationsPathKey}`);
               const stopsSnapshot = await get(stopsRefFirebase);
               if (stopsSnapshot.exists() && stopsSnapshot.val().stops && Array.isArray(stopsSnapshot.val().stops)) {
                 enrichedTrip.stops = stopsSnapshot.val().stops;
-                console.log(`Found stops for key ${stopStationsPathKey}:`, stopsSnapshot.val().stops);
+                // console.log(`Found stops for key ${stopStationsPathKey}:`, stopsSnapshot.val().stops);
               } else {
-                console.log(`No stops found or 'stops' field missing/invalid for key: stopstations/${stopStationsPathKey}. Snapshot exists: ${stopsSnapshot.exists()}. Snapshot val:`, stopsSnapshot.val());
+                // console.log(`No stops found or 'stops' field missing/invalid for key: stopstations/${stopStationsPathKey}. Snapshot exists: ${stopsSnapshot.exists()}. Snapshot val:`, stopsSnapshot.val());
               }
             } catch (stopsError) {
               console.error(`Error fetching stop stations for key ${stopStationsPathKey}:`, stopsError);
             }
           } else {
-            console.log("fbTrip.startPoint or fbTrip.destination is missing, skipping stops fetch.");
+            // console.log("fbTrip.startPoint or fbTrip.destination is missing, skipping stops fetch.");
           }
           setTrip(enrichedTrip);
 
@@ -440,17 +440,17 @@ export default function TripDetailsPage() {
             if (currentDriverData) { 
               deductionAttemptedAndDataFoundInTransaction = true; 
               const currentBalance = Number(currentDriverData.walletBalance) || 0;
-              console.log(`COMMISSION_DEDUCTION_TRANSACTION_INSIDE: Driver ${driverIdForCommission}, Path: ${driverUserRef.toString()}, Current WalletBalance: ${currentBalance}`);
+              // console.log(`COMMISSION_DEDUCTION_TRANSACTION_INSIDE: Driver ${driverIdForCommission}, Path: ${driverUserRef.toString()}, Current WalletBalance: ${currentBalance}`);
               
               const newBalance = currentBalance - commissionAmount;
-              console.log(`COMMISSION_DEDUCTION_TRANSACTION_INSIDE: New WalletBalance for driver ${driverIdForCommission} will be: ${newBalance.toFixed(2)}`);
+              // console.log(`COMMISSION_DEDUCTION_TRANSACTION_INSIDE: New WalletBalance for driver ${driverIdForCommission} will be: ${newBalance.toFixed(2)}`);
               
               currentDriverData.walletBalance = newBalance;
               currentDriverData.updatedAt = Date.now(); 
               
               return currentDriverData; 
             } else {
-              deductionAttemptedAndDataFoundInTransaction = false; 
+              // deductionAttemptedAndDataFoundInTransaction remains false if currentDriverData is null
               console.warn(`COMMISSION_DEDUCTION_TRANSACTION_NO_DATA: Driver user data NOT FOUND for ID ${driverIdForCommission} in dbPrimary at path ${driverUserRef.toString()} (inside transaction). Commission cannot be deducted.`);
               return undefined; 
             }
@@ -520,13 +520,13 @@ export default function TripDetailsPage() {
     const tripRef = ref(dbPrimary, `currentTrips/${currentTripId}`);
     let preReadError = false;
     try {
-        console.log(`Pre-read check for trip ${currentTripId} at ${new Date().toISOString()}`);
+        // console.log(`Pre-read check for trip ${currentTripId} at ${new Date().toISOString()}`);
         const preReadSnapshot = await get(tripRef);
         if (!preReadSnapshot.exists()) {
-            console.warn(`Pre-read: Trip ${currentTripId} not found before transaction attempt.`);
+            // console.warn(`Pre-read: Trip ${currentTripId} not found before transaction attempt.`);
             preReadError = true;
         } else if (preReadSnapshot.val().status !== 'upcoming') {
-            console.warn(`Pre-read: Trip ${currentTripId} status is ${preReadSnapshot.val().status}, not 'upcoming'.`);
+            // console.warn(`Pre-read: Trip ${currentTripId} status is ${preReadSnapshot.val().status}, not 'upcoming'.`);
             preReadError = true;
         }
         if (preReadError) {
@@ -535,7 +535,7 @@ export default function TripDetailsPage() {
              setIsBooking(false);
              return;
         }
-        console.log(`Pre-read for trip ${currentTripId} successful.`);
+        // console.log(`Pre-read for trip ${currentTripId} successful.`);
     } catch (e: any) {
         console.error(`Pre-read error for trip ${currentTripId}:`, e);
         toast({ title: "خطأ في الحجز", description: `حدث خطأ أثناء التحقق من توفر الرحلة: ${e.message || 'خطأ غير معروف'}`, variant: "destructive"});
@@ -545,7 +545,7 @@ export default function TripDetailsPage() {
     }
 
     try {
-      console.log(`Attempt 1: Booking trip ${currentTripId} for user ${userId} at ${new Date().toISOString()}`);
+      // console.log(`Attempt 1: Booking trip ${currentTripId} for user ${userId} at ${new Date().toISOString()}`);
       await performSeatUpdateTransaction(currentTripId, userId, userPhoneNumber, userFullName);
       await handleSuccessfulBookingFinalization(currentTripId, userId, userPhoneNumber, userFullName, paymentType);
     } catch (error: any) {
@@ -553,7 +553,7 @@ export default function TripDetailsPage() {
         console.warn(`HANDLED (Attempt 1 Failed - Not Found): Transaction failed for trip ${currentTripId}. User ${currentUser?.uid}, seats ${selectedSeats.join(', ')}. Error: ${error.message}. Retrying after delay...`);
         await new Promise(resolve => setTimeout(resolve, 1200)); 
         try {
-          console.log(`Attempt 2: Booking trip ${currentTripId} for user ${userId} at ${new Date().toISOString()}`);
+          // console.log(`Attempt 2: Booking trip ${currentTripId} for user ${userId} at ${new Date().toISOString()}`);
           await performSeatUpdateTransaction(currentTripId, userId, userPhoneNumber, userFullName);
           await handleSuccessfulBookingFinalization(currentTripId, userId, userPhoneNumber, userFullName, paymentType);
         } catch (retryError: any) {
@@ -755,7 +755,5 @@ export default function TripDetailsPage() {
     </div>
   );
 }
-
-    
 
     
