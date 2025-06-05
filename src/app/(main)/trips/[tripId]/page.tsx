@@ -440,17 +440,14 @@ export default function TripDetailsPage() {
             if (currentDriverData) { 
               deductionAttemptedAndDataFoundInTransaction = true; 
               const currentBalance = Number(currentDriverData.walletBalance) || 0;
-              // console.log(`COMMISSION_DEDUCTION_TRANSACTION_INSIDE: Driver ${driverIdForCommission}, Path: ${driverUserRef.toString()}, Current WalletBalance: ${currentBalance}`);
-              
               const newBalance = currentBalance - commissionAmount;
-              // console.log(`COMMISSION_DEDUCTION_TRANSACTION_INSIDE: New WalletBalance for driver ${driverIdForCommission} will be: ${newBalance.toFixed(2)}`);
               
               currentDriverData.walletBalance = newBalance;
               currentDriverData.updatedAt = Date.now(); 
               
               return currentDriverData; 
             } else {
-              // deductionAttemptedAndDataFoundInTransaction remains false if currentDriverData is null
+              deductionAttemptedAndDataFoundInTransaction = false;
               console.warn(`COMMISSION_DEDUCTION_TRANSACTION_NO_DATA: Driver user data NOT FOUND for ID ${driverIdForCommission} in dbPrimary at path ${driverUserRef.toString()} (inside transaction). Commission cannot be deducted.`);
               return undefined; 
             }
@@ -755,5 +752,4 @@ export default function TripDetailsPage() {
     </div>
   );
 }
-
     
