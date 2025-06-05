@@ -338,7 +338,7 @@ export default function TripDetailsPage() {
         return;
     }
 
-    const originalSelectedSeats = [...selectedSeats]; // Capture selected seats before clearing
+    const originalSelectedSeats = [...selectedSeats]; 
     const bookedSeatsCount = originalSelectedSeats.length;
 
     for (const seatId of originalSelectedSeats) {
@@ -418,17 +418,17 @@ export default function TripDetailsPage() {
         console.error("CRITICAL_COMMISSION_ABORT: driverIdForCommission is undefined or null in trip.driver.id. Commission cannot be deducted.", trip.driver);
     } else {
         const driverUserRef = ref(dbPrimary, `users/${driverIdForCommission}`); 
-        console.log(`COMMISSION_DEDUCTION_INFO: Attempting for driver: ${driverIdForCommission} for booking of ${bookedSeatsCount} seat(s): ${originalSelectedSeats.join(', ')}`);
+        console.log(`COMMISSION_DEDUCTION_INFO: Attempting for driver: ${driverIdForCommission} (path: ${driverUserRef.toString()}) for booking of ${bookedSeatsCount} seat(s): ${originalSelectedSeats.join(', ')}`);
 
         try {
             const preTransactionDriverSnapshot = await get(driverUserRef);
             if (preTransactionDriverSnapshot.exists()) {
-                console.log(`COMMISSION_DEDUCTION_PRE_GET_SUCCESS: Successfully fetched driver data for ${driverIdForCommission} BEFORE transaction:`, JSON.parse(JSON.stringify(preTransactionDriverSnapshot.val())));
+                console.log(`COMMISSION_DEDUCTION_PRE_GET_SUCCESS: Successfully fetched driver data for ${driverIdForCommission} (path: ${driverUserRef.toString()}) BEFORE transaction:`, JSON.parse(JSON.stringify(preTransactionDriverSnapshot.val())));
             } else {
-                console.warn(`COMMISSION_DEDUCTION_PRE_GET_NOT_FOUND: Driver data NOT FOUND for ID ${driverIdForCommission} at path users/${driverIdForCommission} in dbPrimary (BEFORE transaction).`);
+                console.warn(`COMMISSION_DEDUCTION_PRE_GET_NOT_FOUND: Driver data NOT FOUND for ID ${driverIdForCommission} at path ${driverUserRef.toString()} in dbPrimary (BEFORE transaction).`);
             }
         } catch (e: any) {
-            console.error(`COMMISSION_DEDUCTION_PRE_GET_ERROR: Error fetching driver data for ${driverIdForCommission} BEFORE transaction:`, e.message, e);
+            console.error(`COMMISSION_DEDUCTION_PRE_GET_ERROR: Error fetching driver data for ${driverIdForCommission} (path: ${driverUserRef.toString()}) BEFORE transaction:`, e.message, e);
         }
         
         console.log(`COMMISSION_DEDUCTION_DELAY: Adding a 1.5s delay before driver wallet transaction for ${driverIdForCommission}. Current time: ${new Date().toISOString()}`);
@@ -438,33 +438,32 @@ export default function TripDetailsPage() {
         try {
           await runTransaction(driverUserRef, (currentDriverData: FirebaseUser | null): FirebaseUser | undefined => {
             if (currentDriverData) { 
-              deductionAttemptedAndDataFoundInTransaction = true; // Data was found by the transaction
+              deductionAttemptedAndDataFoundInTransaction = true; 
               const currentBalance = Number(currentDriverData.walletBalance) || 0;
-              console.log(`COMMISSION_DEDUCTION_TRANSACTION_BALANCE_CHECK: Current walletBalance for driver ${driverIdForCommission} (inside transaction): ${currentBalance}`);
+              console.log(`COMMISSION_DEDUCTION_TRANSACTION_INSIDE: Driver ${driverIdForCommission}, Path: ${driverUserRef.toString()}, Current WalletBalance: ${currentBalance}`);
               
               const newBalance = currentBalance - commissionAmount;
-              console.log(`COMMISSION_DEDUCTION_TRANSACTION_NEW_BALANCE: New walletBalance for driver ${driverIdForCommission} (inside transaction) will be: ${newBalance}`);
+              console.log(`COMMISSION_DEDUCTION_TRANSACTION_INSIDE: New WalletBalance for driver ${driverIdForCommission} will be: ${newBalance.toFixed(2)}`);
               
               currentDriverData.walletBalance = newBalance;
               currentDriverData.updatedAt = Date.now(); 
-              console.log(`COMMISSION_DEDUCTION_TRANSACTION_UPDATED_AT: New updatedAt for driver ${driverIdForCommission} (inside transaction): ${currentDriverData.updatedAt}`);
               
               return currentDriverData; 
             } else {
-              deductionAttemptedAndDataFoundInTransaction = false; // Data was NOT found by the transaction
+              deductionAttemptedAndDataFoundInTransaction = false; 
               console.warn(`COMMISSION_DEDUCTION_TRANSACTION_NO_DATA: Driver user data NOT FOUND for ID ${driverIdForCommission} in dbPrimary at path ${driverUserRef.toString()} (inside transaction). Commission cannot be deducted.`);
               return undefined; 
             }
           });
 
           if(deductionAttemptedAndDataFoundInTransaction){
-            console.log(`COMMISSION_DEDUCTION_TRANSACTION_APPLIED: Wallet deduction transaction for driver ${driverIdForCommission} was processed by Firebase. Data was found and update was attempted.`);
+            console.log(`COMMISSION_DEDUCTION_TRANSACTION_APPLIED: Wallet deduction transaction for driver ${driverIdForCommission} (path: ${driverUserRef.toString()}) was processed by Firebase. Data was found and update was attempted.`);
           } else {
-            console.warn(`COMMISSION_DEDUCTION_TRANSACTION_ABORTED_NO_DATA: Wallet deduction transaction for driver ${driverIdForCommission} completed, but no driver data was found by the transaction to update. Path checked: ${driverUserRef.toString()}.`);
+            console.warn(`COMMISSION_DEDUCTION_TRANSACTION_ABORTED_NO_DATA: Wallet deduction transaction for driver ${driverIdForCommission} (path: ${driverUserRef.toString()}) completed, but no driver data was found by the transaction to update.`);
           }
 
         } catch (error: any) {
-          console.error(`COMMISSION_DEDUCTION_TRANSACTION_ERROR: Failed to deduct commission for driver ${driverIdForCommission}. Error:`, error.message);
+          console.error(`COMMISSION_DEDUCTION_TRANSACTION_ERROR: Failed to deduct commission for driver ${driverIdForCommission} (path: ${driverUserRef.toString()}). Error:`, error.message);
           console.error("COMMISSION_DEDUCTION_TRANSACTION_ERROR_FULL: Full error object:", error);
         }
     }
@@ -756,5 +755,7 @@ export default function TripDetailsPage() {
     </div>
   );
 }
+
+    
 
     
