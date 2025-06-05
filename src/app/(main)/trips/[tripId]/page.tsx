@@ -412,29 +412,18 @@ export default function TripDetailsPage() {
     // Commission Deduction Logic
     const driverIdForCommission = trip.driver.id;
     const commissionAmount = 0.20;
-    let deductionAttemptedAndDataFoundInTransaction = false; 
-
+    
     if (!driverIdForCommission) {
         console.error("CRITICAL_COMMISSION_ABORT: driverIdForCommission is undefined or null in trip.driver.id. Commission cannot be deducted.", trip.driver);
     } else {
         const driverUserRef = ref(dbPrimary, `users/${driverIdForCommission}`); 
-        console.log(`COMMISSION_DEDUCTION_INFO: Attempting for driver: ${driverIdForCommission} (path: ${driverUserRef.toString()}) for booking of ${bookedSeatsCount} seat(s): ${originalSelectedSeats.join(', ')}`);
-
-        try {
-            const preTransactionDriverSnapshot = await get(driverUserRef);
-            if (preTransactionDriverSnapshot.exists()) {
-                console.log(`COMMISSION_DEDUCTION_PRE_GET_SUCCESS: Successfully fetched driver data for ${driverIdForCommission} (path: ${driverUserRef.toString()}) BEFORE transaction:`, JSON.parse(JSON.stringify(preTransactionDriverSnapshot.val())));
-            } else {
-                console.warn(`COMMISSION_DEDUCTION_PRE_GET_NOT_FOUND: Driver data NOT FOUND for ID ${driverIdForCommission} at path ${driverUserRef.toString()} in dbPrimary (BEFORE transaction).`);
-            }
-        } catch (e: any) {
-            console.error(`COMMISSION_DEDUCTION_PRE_GET_ERROR: Error fetching driver data for ${driverIdForCommission} (path: ${driverUserRef.toString()}) BEFORE transaction:`, e.message, e);
-        }
+        console.log(`COMMISSION_DEDUCTION_INFO: Attempting commission deduction for driver: ${driverIdForCommission} (path: ${driverUserRef.toString()}) for booking of ${bookedSeatsCount} seat(s): ${originalSelectedSeats.join(', ')}`);
         
         console.log(`COMMISSION_DEDUCTION_DELAY: Adding a 1.5s delay before driver wallet transaction for ${driverIdForCommission}. Current time: ${new Date().toISOString()}`);
         await new Promise(resolve => setTimeout(resolve, 1500)); 
         console.log(`COMMISSION_DEDUCTION_DELAY: Delay finished for ${driverIdForCommission}. Proceeding with transaction. Current time: ${new Date().toISOString()}`);
 
+        let deductionAttemptedAndDataFoundInTransaction = false; 
         try {
           await runTransaction(driverUserRef, (currentDriverData: FirebaseUser | null): FirebaseUser | undefined => {
             if (currentDriverData) { 
@@ -447,7 +436,7 @@ export default function TripDetailsPage() {
               
               return currentDriverData; 
             } else {
-              deductionAttemptedAndDataFoundInTransaction = false;
+              deductionAttemptedAndDataFoundInTransaction = false; // Ensure flag is false if no data
               console.warn(`COMMISSION_DEDUCTION_TRANSACTION_NO_DATA: Driver user data NOT FOUND for ID ${driverIdForCommission} in dbPrimary at path ${driverUserRef.toString()} (inside transaction). Commission cannot be deducted.`);
               return undefined; 
             }
@@ -456,7 +445,8 @@ export default function TripDetailsPage() {
           if(deductionAttemptedAndDataFoundInTransaction){
             console.log(`COMMISSION_DEDUCTION_TRANSACTION_APPLIED: Wallet deduction transaction for driver ${driverIdForCommission} (path: ${driverUserRef.toString()}) was processed by Firebase. Data was found and update was attempted.`);
           } else {
-            console.warn(`COMMISSION_DEDUCTION_TRANSACTION_ABORTED_NO_DATA: Wallet deduction transaction for driver ${driverIdForCommission} (path: ${driverUserRef.toString()}) completed, but no driver data was found by the transaction to update.`);
+            // This case will be hit if the transaction function returned undefined (e.g. no data found)
+            console.warn(`COMMISSION_DEDUCTION_TRANSACTION_ABORTED_NO_DATA: Wallet deduction transaction for driver ${driverIdForCommission} (path: ${driverUserRef.toString()}) completed, but no driver data was found by the transaction to update (or transaction was aborted).`);
           }
 
         } catch (error: any) {
@@ -752,4 +742,6 @@ export default function TripDetailsPage() {
     </div>
   );
 }
+    
+
     
