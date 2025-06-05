@@ -426,7 +426,7 @@ export default function TripDetailsPage() {
         let deductionAttemptedAndDataFoundInTransaction = false; 
         try {
           await runTransaction(driverUserRef, (currentDriverData: FirebaseUser | null): FirebaseUser | undefined => {
-            if (currentDriverData) { 
+            if (currentDriverData && typeof currentDriverData === 'object') { 
               deductionAttemptedAndDataFoundInTransaction = true; 
               const currentBalance = Number(currentDriverData.walletBalance) || 0;
               const newBalance = currentBalance - commissionAmount;
@@ -436,8 +436,8 @@ export default function TripDetailsPage() {
               
               return currentDriverData; 
             } else {
-              deductionAttemptedAndDataFoundInTransaction = false; // Ensure flag is false if no data
-              console.warn(`COMMISSION_DEDUCTION_TRANSACTION_NO_DATA: Driver user data NOT FOUND for ID ${driverIdForCommission} in dbPrimary at path ${driverUserRef.toString()} (inside transaction). Commission cannot be deducted.`);
+              deductionAttemptedAndDataFoundInTransaction = false; 
+              console.warn(`COMMISSION_DEDUCTION_TRANSACTION_NO_DATA: Driver user data (or not an object) for ID ${driverIdForCommission} at path ${driverUserRef.toString()} was ${JSON.stringify(currentDriverData)} (inside transaction). Commission cannot be deducted.`);
               return undefined; 
             }
           });
@@ -445,8 +445,7 @@ export default function TripDetailsPage() {
           if(deductionAttemptedAndDataFoundInTransaction){
             console.log(`COMMISSION_DEDUCTION_TRANSACTION_APPLIED: Wallet deduction transaction for driver ${driverIdForCommission} (path: ${driverUserRef.toString()}) was processed by Firebase. Data was found and update was attempted.`);
           } else {
-            // This case will be hit if the transaction function returned undefined (e.g. no data found)
-            console.warn(`COMMISSION_DEDUCTION_TRANSACTION_ABORTED_NO_DATA: Wallet deduction transaction for driver ${driverIdForCommission} (path: ${driverUserRef.toString()}) completed, but no driver data was found by the transaction to update (or transaction was aborted).`);
+            console.warn(`COMMISSION_DEDUCTION_TRANSACTION_ABORTED_NO_DATA: Wallet deduction transaction for driver ${driverIdForCommission} (path: ${driverUserRef.toString()}) completed, but no driver data was found by the transaction to update (or transaction was aborted due to invalid data type).`);
           }
 
         } catch (error: any) {
@@ -745,3 +744,4 @@ export default function TripDetailsPage() {
     
 
     
+
