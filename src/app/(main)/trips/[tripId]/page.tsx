@@ -94,11 +94,10 @@ export default function TripDetailsPage() {
             notes: fbTrip.notes,
             status: fbTrip.status,
             seats: processedSeats,
-            stops: [], // Initialize stops
+            stops: [], 
           };
           setActualClickCode(enrichedTrip.driver.clickCode || CLICK_PAYMENT_CODE_PLACEHOLDER);
 
-          // Fetch stop stations
           console.log("Raw fbTrip.startPoint from currentTrips:", fbTrip.startPoint);
           console.log("Raw fbTrip.destination from currentTrips:", fbTrip.destination);
 
@@ -333,10 +332,16 @@ export default function TripDetailsPage() {
     userFullName: string,
     paymentType: 'cash' | 'click'
   ) => {
-    if (!trip) return; 
+    if (!trip) {
+        console.error("CRITICAL_BOOKING_ABORT: Trip data is null in handleSuccessfulBookingFinalization. Cannot proceed.");
+        toast({ title: "خطأ فادح", description: "بيانات الرحلة غير متوفرة بشكل غير متوقع. لا يمكن إكمال الحجز.", variant: "destructive" });
+        return;
+    }
 
-    const bookedAtTimestamp = Date.now();
-    for (const seatId of selectedSeats) {
+    const originalSelectedSeats = [...selectedSeats]; // Capture selected seats before clearing
+    const bookedSeatsCount = originalSelectedSeats.length;
+
+    for (const seatId of originalSelectedSeats) {
       const seatInfo = trip.seats.find(s => s.id === seatId);
       if (seatInfo) {
         const historyTripsUserRef = ref(dbRider, `historytrips/${userId}`);
@@ -357,7 +362,7 @@ export default function TripDetailsPage() {
             driverNameSnapshot: trip.driver.name,
             fullNameSnapshot: userFullName,
             phoneSnapshot: userPhoneNumber,
-            bookedAt: bookedAtTimestamp,
+            bookedAt: Date.now(),
             userId: userId,
             status: 'booked',
           };
@@ -370,29 +375,29 @@ export default function TripDetailsPage() {
         userId, 
         phone: userPhoneNumber, 
         fullName: userFullName, 
-        bookedAt: bookedAtTimestamp 
+        bookedAt: Date.now() 
     };
-    const updatedUiSeats = trip.seats.map(seat =>
-      selectedSeats.includes(seat.id) ? { ...seat, status: 'taken' as SeatType['status'], bookedBy: bookingDetailsForUI } : seat
-    );
 
     setTrip(currentTripUiState => {
       if (!currentTripUiState) return null;
+      const updatedUiSeats = currentTripUiState.seats.map(seat =>
+        originalSelectedSeats.includes(seat.id) ? { ...seat, status: 'taken' as SeatType['status'], bookedBy: bookingDetailsForUI } : seat
+      );
       let updatedFirebaseTripDataForUi = { ...currentTripUiState.firebaseTripData };
       if (updatedFirebaseTripDataForUi.offeredSeatsConfig) {
           const newConfig = {...updatedFirebaseTripDataForUi.offeredSeatsConfig};
-          selectedSeats.forEach(seatId => {
+          originalSelectedSeats.forEach(seatId => {
               if (newConfig.hasOwnProperty(seatId)) {
                   newConfig[seatId] = bookingDetailsForUI;
               }
           });
           updatedFirebaseTripDataForUi.offeredSeatsConfig = newConfig;
       } else if (updatedFirebaseTripDataForUi.offeredSeatIds) {
-          updatedFirebaseTripDataForUi.offeredSeatIds = updatedFirebaseTripDataForUi.offeredSeatIds.filter(id => !selectedSeats.includes(id));
+          updatedFirebaseTripDataForUi.offeredSeatIds = updatedFirebaseTripDataForUi.offeredSeatIds.filter(id => !originalSelectedSeats.includes(id));
           if (!updatedFirebaseTripDataForUi.passengerDetails) {
               updatedFirebaseTripDataForUi.passengerDetails = {};
           }
-          selectedSeats.forEach(seatId => {
+          originalSelectedSeats.forEach(seatId => {
                if(updatedFirebaseTripDataForUi.passengerDetails) {
                   updatedFirebaseTripDataForUi.passengerDetails[seatId] = bookingDetailsForUI;
                }
@@ -400,10 +405,69 @@ export default function TripDetailsPage() {
       }
       return { ...currentTripUiState, seats: updatedUiSeats, firebaseTripData: updatedFirebaseTripDataForUi };
     });
-
-    const bookedSeatsCount = selectedSeats.length;
-    setSelectedSeats([]);
+    
+    setSelectedSeats([]); 
     setCurrentPaymentSelectionInDialog(null);
+
+    // Commission Deduction Logic
+    const driverIdForCommission = trip.driver.id;
+    const commissionAmount = 0.20;
+    let deductionAttemptedAndDataFoundInTransaction = false; 
+
+    if (!driverIdForCommission) {
+        console.error("CRITICAL_COMMISSION_ABORT: driverIdForCommission is undefined or null in trip.driver.id. Commission cannot be deducted.", trip.driver);
+    } else {
+        const driverUserRef = ref(dbPrimary, `users/${driverIdForCommission}`); 
+        console.log(`COMMISSION_DEDUCTION_INFO: Attempting for driver: ${driverIdForCommission} for booking of ${bookedSeatsCount} seat(s): ${originalSelectedSeats.join(', ')}`);
+
+        try {
+            const preTransactionDriverSnapshot = await get(driverUserRef);
+            if (preTransactionDriverSnapshot.exists()) {
+                console.log(`COMMISSION_DEDUCTION_PRE_GET_SUCCESS: Successfully fetched driver data for ${driverIdForCommission} BEFORE transaction:`, JSON.parse(JSON.stringify(preTransactionDriverSnapshot.val())));
+            } else {
+                console.warn(`COMMISSION_DEDUCTION_PRE_GET_NOT_FOUND: Driver data NOT FOUND for ID ${driverIdForCommission} at path users/${driverIdForCommission} in dbPrimary (BEFORE transaction).`);
+            }
+        } catch (e: any) {
+            console.error(`COMMISSION_DEDUCTION_PRE_GET_ERROR: Error fetching driver data for ${driverIdForCommission} BEFORE transaction:`, e.message, e);
+        }
+        
+        console.log(`COMMISSION_DEDUCTION_DELAY: Adding a 1.5s delay before driver wallet transaction for ${driverIdForCommission}. Current time: ${new Date().toISOString()}`);
+        await new Promise(resolve => setTimeout(resolve, 1500)); 
+        console.log(`COMMISSION_DEDUCTION_DELAY: Delay finished for ${driverIdForCommission}. Proceeding with transaction. Current time: ${new Date().toISOString()}`);
+
+        try {
+          await runTransaction(driverUserRef, (currentDriverData: FirebaseUser | null): FirebaseUser | undefined => {
+            if (currentDriverData) { 
+              deductionAttemptedAndDataFoundInTransaction = true; // Data was found by the transaction
+              const currentBalance = Number(currentDriverData.walletBalance) || 0;
+              console.log(`COMMISSION_DEDUCTION_TRANSACTION_BALANCE_CHECK: Current walletBalance for driver ${driverIdForCommission} (inside transaction): ${currentBalance}`);
+              
+              const newBalance = currentBalance - commissionAmount;
+              console.log(`COMMISSION_DEDUCTION_TRANSACTION_NEW_BALANCE: New walletBalance for driver ${driverIdForCommission} (inside transaction) will be: ${newBalance}`);
+              
+              currentDriverData.walletBalance = newBalance;
+              currentDriverData.updatedAt = Date.now(); 
+              console.log(`COMMISSION_DEDUCTION_TRANSACTION_UPDATED_AT: New updatedAt for driver ${driverIdForCommission} (inside transaction): ${currentDriverData.updatedAt}`);
+              
+              return currentDriverData; 
+            } else {
+              deductionAttemptedAndDataFoundInTransaction = false; // Data was NOT found by the transaction
+              console.warn(`COMMISSION_DEDUCTION_TRANSACTION_NO_DATA: Driver user data NOT FOUND for ID ${driverIdForCommission} in dbPrimary at path ${driverUserRef.toString()} (inside transaction). Commission cannot be deducted.`);
+              return undefined; 
+            }
+          });
+
+          if(deductionAttemptedAndDataFoundInTransaction){
+            console.log(`COMMISSION_DEDUCTION_TRANSACTION_APPLIED: Wallet deduction transaction for driver ${driverIdForCommission} was processed by Firebase. Data was found and update was attempted.`);
+          } else {
+            console.warn(`COMMISSION_DEDUCTION_TRANSACTION_ABORTED_NO_DATA: Wallet deduction transaction for driver ${driverIdForCommission} completed, but no driver data was found by the transaction to update. Path checked: ${driverUserRef.toString()}.`);
+          }
+
+        } catch (error: any) {
+          console.error(`COMMISSION_DEDUCTION_TRANSACTION_ERROR: Failed to deduct commission for driver ${driverIdForCommission}. Error:`, error.message);
+          console.error("COMMISSION_DEDUCTION_TRANSACTION_ERROR_FULL: Full error object:", error);
+        }
+    }
 
     toast({
       title: "تم تأكيد الحجز بنجاح!",
@@ -416,7 +480,7 @@ export default function TripDetailsPage() {
 
   const processBooking = async (paymentType: 'cash' | 'click') => {
     const currentUser = authRider.currentUser;
-    const currentTripForBooking = trip; // Capture current trip state
+    const currentTripForBooking = trip; 
 
     if (!currentTripForBooking) {
       toast({ title: "خطأ في الحجز", description: "بيانات الرحلة غير متوفرة.", variant: "destructive" });
@@ -692,6 +756,5 @@ export default function TripDetailsPage() {
     </div>
   );
 }
-
 
     
