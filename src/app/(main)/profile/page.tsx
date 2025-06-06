@@ -132,6 +132,7 @@ export default function ProfilePage() {
       setIsLoading(true);
       if (user) {
         setCurrentUserAuth(user);
+        // Initial fetch for user data and support phone number
         Promise.all([fetchUserData(user), fetchSupportPhoneNumber()]).then(() => {
           setIsLoading(false);
         });
@@ -144,6 +145,28 @@ export default function ProfilePage() {
     });
     return () => unsubscribe();
   }, [router, fetchUserData, fetchSupportPhoneNumber]);
+
+  // useEffect for periodically fetching the support phone number
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout | null = null;
+
+    if (currentUserAuth) {
+      // Interval starts after user is authenticated.
+      // fetchSupportPhoneNumber is already called once in the onAuthStateChanged effect.
+      intervalId = setInterval(() => {
+        console.log("PROFILE_PAGE_INTERVAL: Re-fetching support phone number every 30 seconds.");
+        fetchSupportPhoneNumber();
+      }, 30000); // 30 seconds
+    }
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+        console.log("PROFILE_PAGE_INTERVAL: Cleared support phone number fetch interval.");
+      }
+    };
+  }, [currentUserAuth, fetchSupportPhoneNumber]); // Re-run if currentUserAuth or fetchSupportPhoneNumber changes
+
 
   const onSubmit = async (data: ProfileFormData) => {
     if (!currentUserAuth) return;
@@ -170,19 +193,19 @@ export default function ProfilePage() {
         if (existingData.createdAt) {
             updates.createdAt = existingData.createdAt;
         } else {
-            updates.createdAt = serverTimestamp();
+            updates.createdAt = serverTimestamp(); // Should ideally not happen if createdAt is always set on creation
         }
       }
 
       await update(userRef, updates);
 
       setUserData(prev => ({
-        ...(prev || { fullName: "", phoneNumber: ""}),
+        ...(prev || { fullName: "", phoneNumber: ""}), // Ensure prev is not null
         ...updates,
-        updatedAt: Date.now()
-       } as UserProfileData));
+        updatedAt: Date.now() // Use client time for immediate UI update of updatedAt
+       } as UserProfileData)); // Cast to UserProfileData
 
-      form.reset(data);
+      form.reset(data); // Update form with successfully saved data
       toast({ title: "تم بنجاح", description: "تم تحديث بيانات ملفك الشخصي.", className: "bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-200 border-green-300 dark:border-green-600"});
     } catch (error: any) {
       console.error("Error updating profile:", error);
@@ -208,12 +231,11 @@ export default function ProfilePage() {
       numberToUse = numberToUse.substring(1);
     }
 
-    // Specific check for Jordanian numbers if they often start with 07... and need 962 prefix
     if (numberToUse.startsWith("07") && numberToUse.length === 10) { 
        numberToUse = "962" + numberToUse.substring(1);
     }
 
-    if (!/^\d+$/.test(numberToUse)) { // Ensure only digits remain after formatting
+    if (!/^\d+$/.test(numberToUse)) { 
         console.error("PROFILE_PAGE: Invalid characters in support phone number after formatting:", numberToUse);
         toast({ title: "خطأ", description: "رقم هاتف الدعم غير صالح.", variant: "destructive" });
         return;
@@ -309,7 +331,7 @@ export default function ProfilePage() {
             onClick={handleWhatsAppSupport}
             className="w-full p-3 text-base bg-[#25D366] text-white hover:bg-[#1DAE54] focus:bg-[#1DAE54] focus:ring-[#25D366]"
             aria-label="تواصل مع الدعم"
-            disabled={isLoading}
+            disabled={isLoading} // Keep disabled if still loading initial data
           >
             <MessageCircle className="ms-2 h-5 w-5" />
             <strong>تواصل مع الدعم</strong>
@@ -319,4 +341,3 @@ export default function ProfilePage() {
     </PageWrapper>
   );
 }
-
