@@ -64,7 +64,14 @@ export default function ProfilePage() {
           console.log("PROFILE_PAGE: Successfully fetched support number from DB as string:", val);
           setSupportPhoneNumber(val);
         } else {
-          console.warn("PROFILE_PAGE: Support phone number found in DB, but it's NOT a valid non-empty string. Value:", JSON.stringify(val), ". Using fallback '0775580440'.");
+          // Log why it failed
+          if (typeof val !== 'string') {
+            console.warn(`PROFILE_PAGE: Support phone number found, but its type is NOT string. Type: ${typeof val}. Value: ${JSON.stringify(val)}. Using fallback.`);
+          } else if (val.trim() === '') {
+            console.warn(`PROFILE_PAGE: Support phone number found as string, but it's EMPTY or whitespace. Value: "${val}". Using fallback.`);
+          } else {
+             console.warn(`PROFILE_PAGE: Support phone number found, but condition (typeof val === 'string' && val.trim() !== '') failed for unknown reason. Value: "${val}". Using fallback.`);
+          }
           setSupportPhoneNumber("0775580440");
         }
       } else {
@@ -74,7 +81,7 @@ export default function ProfilePage() {
     } catch (error) {
       console.error("PROFILE_PAGE: Error fetching support phone number:", error);
       toast({ title: "خطأ", description: "لم نتمكن من تحميل رقم هاتف الدعم. سيتم استخدام الرقم الافتراضي.", variant: "destructive" });
-      setSupportPhoneNumber("0775580440");
+      setSupportPhoneNumber("0775580440"); // Fallback on error
     }
   }, [toast]);
 
@@ -222,7 +229,7 @@ export default function ProfilePage() {
     );
   }
 
-  if (!currentUserAuth) { // Removed !userData check here as it might be briefly null during initial load
+  if (!currentUserAuth) { 
     return (
       <PageWrapper>
         <div className="text-center py-10">
@@ -292,7 +299,7 @@ export default function ProfilePage() {
         <CardFooter className="flex flex-col gap-4 pt-6 border-t">
            <Button
             onClick={handleWhatsAppSupport}
-            disabled={isSaving} // Enable button even if number is loading, will use fallback if necessary
+            disabled={isSaving} 
             className="w-full p-3 text-base bg-[#25D366] text-white hover:bg-[#1DAE54] focus:bg-[#1DAE54] focus:ring-[#25D366]"
             aria-label="تواصل مع الدعم عبر واتساب"
             >
@@ -305,5 +312,3 @@ export default function ProfilePage() {
     </PageWrapper>
   );
 }
-
-    
