@@ -20,7 +20,7 @@ import { PageWrapper } from '@/components/layout/PageWrapper';
 interface UserProfileData {
   fullName: string;
   phoneNumber: string;
-  email: string; // Kept in interface for potential future use or if auth still provides it
+  // email: string; // Removed as per user request
   createdAt?: number;
   updatedAt?: number;
 }
@@ -56,12 +56,12 @@ export default function ProfilePage() {
       if (snapshot.exists() && typeof snapshot.val() === 'string') {
         setSupportPhoneNumber(snapshot.val() as string);
       } else {
-        console.warn("Support phone number not found or not a string in dbRider at support/contactPhoneNumber. Using fallback.");
+        console.warn("Support phone number not found or not a string in dbRider at support/contactPhoneNumber. Using fallback '0775580440'.");
         setSupportPhoneNumber("0775580440"); 
       }
     } catch (error) {
       console.error("Error fetching support phone number:", error);
-      toast({ title: "خطأ", description: "لم نتمكن من تحميل رقم هاتف الدعم.", variant: "destructive" });
+      toast({ title: "خطأ", description: "لم نتمكن من تحميل رقم هاتف الدعم. سيتم استخدام الرقم الافتراضي.", variant: "destructive" });
       setSupportPhoneNumber("0775580440"); 
     }
   }, [toast]);
@@ -75,7 +75,7 @@ export default function ProfilePage() {
         const profileData: UserProfileData = {
           fullName: dbData.fullName || "",
           phoneNumber: dbData.phoneNumber || "",
-          email: user.email || dbData.email || "", 
+          // email: user.email || dbData.email || "", // Removed
           createdAt: dbData.createdAt,
           updatedAt: dbData.updatedAt,
         };
@@ -85,10 +85,12 @@ export default function ProfilePage() {
           phoneNumber: profileData.phoneNumber,
         });
       } else {
+        // User exists in Auth but not in DB (e.g., incomplete signup or new user)
+        // Populate form with Auth data if available, prompt to complete profile
         const profileData: UserProfileData = {
             fullName: user.displayName || "",
             phoneNumber: user.phoneNumber || "", 
-            email: user.email || ""
+            // email: user.email || "" // Removed
         };
         setUserData(profileData);
         form.reset({
@@ -109,10 +111,11 @@ export default function ProfilePage() {
       if (user) {
         setCurrentUserAuth(user);
         fetchUserData(user);
-        fetchSupportPhoneNumber();
+        fetchSupportPhoneNumber(); // Fetch support number when user is available
       } else {
         setCurrentUserAuth(null);
         setUserData(null);
+        setSupportPhoneNumber(null); // Clear support number on sign out
         router.push('/auth/signin');
       }
       setIsLoading(false);
@@ -126,7 +129,6 @@ export default function ProfilePage() {
     try {
       const userRef = ref(dbRider, `users/${currentUserAuth.uid}`);
       
-      // Email is intentionally not part of the update payload to the database here
       const updates: Partial<Omit<UserProfileData, 'email'>> & {updatedAt: any, uid: string, createdAt?: any, email?: string } = {
         uid: currentUserAuth.uid,
         fullName: data.fullName,
@@ -135,10 +137,9 @@ export default function ProfilePage() {
       };
       
       // Persist email if it was loaded, or if the user is new in DB, from Auth.
-      // This part is tricky if email is truly "removed" from user management on this page.
-      // For now, let's assume we still store it in the DB if it comes from Auth or was already there.
-      if (userData?.email || currentUserAuth.email) {
-          updates.email = userData?.email || currentUserAuth.email || "";
+      // This is relevant only if email were part of UserProfileData and the form
+      if (currentUserAuth.email) { // Check Auth email
+          updates.email = currentUserAuth.email; // Store/update email from Auth
       }
 
 
@@ -150,6 +151,7 @@ export default function ProfilePage() {
         if (existingData.createdAt) {
             updates.createdAt = existingData.createdAt;
         } else {
+            // If somehow createdAt is missing on existing user, set it now
             updates.createdAt = serverTimestamp(); 
         }
       }
@@ -157,9 +159,9 @@ export default function ProfilePage() {
       await update(userRef, updates);
 
       setUserData(prev => ({
-        ...(prev || {}), 
+        ...(prev || { fullName: "", phoneNumber: ""}), // Ensure prev is not null
         ...updates, 
-        email: updates.email || prev?.email || "", // Ensure email state is consistent
+        // email: updates.email || prev?.email || "", // Removed
         updatedAt: Date.now() 
        } as UserProfileData)); 
        
@@ -177,13 +179,16 @@ export default function ProfilePage() {
     if (supportPhoneNumber) {
       let whatsappFormattedNumber = supportPhoneNumber.replace(/\s+/g, ''); 
       if (whatsappFormattedNumber.startsWith('0')) {
+        // Assuming Jordanian numbers, prepend 962 if it starts with 0
         whatsappFormattedNumber = `962${whatsappFormattedNumber.substring(1)}`;
-      } else if (!whatsappFormattedNumber.startsWith('962')) {
-        // Potentially add 962 if it's a local number without leading 0
+      } else if (!whatsappFormattedNumber.startsWith('962') && whatsappFormattedNumber.length === 9 && ['77','78','79'].includes(whatsappFormattedNumber.substring(0,2))) {
+        // If it's a 9-digit number likely missing the leading 0 and country code
+        whatsappFormattedNumber = `962${whatsappFormattedNumber}`;
       }
+      // No changes if it already starts with 962 or is in another international format
       window.open(`https://wa.me/${whatsappFormattedNumber}`, '_blank', 'noopener,noreferrer');
     } else {
-      toast({ title: "رقم الدعم غير متوفر", description: "عذراً، رقم هاتف الدعم غير متاح حالياً.", variant: "default" });
+      toast({ title: "رقم الدعم غير متوفر", description: "عذراً، رقم هاتف الدعم غير متاح حالياً. الرجاء المحاولة لاحقاً أو الاتصال بالرقم الافتراضي.", variant: "default" });
     }
   };
 
@@ -199,6 +204,9 @@ export default function ProfilePage() {
   }
 
   if (!currentUserAuth || !userData) {
+    // This case might be hit briefly if auth changes before data loads,
+    // or if user directly navigates to /profile without being logged in.
+    // The useEffect should redirect to /auth/signin if currentUserAuth becomes null.
     return (
       <PageWrapper>
         <div className="text-center py-10">
@@ -258,6 +266,8 @@ export default function ProfilePage() {
                 )}
               />
               
+              {/* Email field removed as per user request */}
+
               <Button type="submit" className="w-full p-3 text-base" disabled={isSaving}>
                 {isSaving ? <Loader2 className="ms-2 h-5 w-5 animate-spin" /> : <Save className="ms-2 h-5 w-5" />}
                 {isSaving ? "جارِ الحفظ..." : "حفظ التغييرات"}
@@ -268,7 +278,7 @@ export default function ProfilePage() {
         <CardFooter className="flex flex-col gap-4 pt-6 border-t">
            <Button 
             onClick={handleWhatsAppSupport} 
-            disabled={!supportPhoneNumber}
+            disabled={!supportPhoneNumber || isSaving} // Disable if no number or if saving profile
             className="w-full p-3 text-base bg-[#25D366] text-white hover:bg-[#1DAE54] focus:bg-[#1DAE54] focus:ring-[#25D366]"
             aria-label="تواصل مع الدعم عبر واتساب"
             >
