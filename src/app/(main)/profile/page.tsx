@@ -57,29 +57,28 @@ export default function ProfilePage() {
 
       if (snapshot.exists()) {
         const val = snapshot.val();
-        console.log("PROFILE_PAGE: Value from support/contactPhoneNumber:", JSON.stringify(val)); // Log the raw value
-        console.log("PROFILE_PAGE: Typeof value from support/contactPhoneNumber:", typeof val);
+        // رسائل تشخيص مفصلة
+        console.log("PROFILE_PAGE: RAW Value from DB (support/contactPhoneNumber):", JSON.stringify(val));
+        console.log("PROFILE_PAGE: Type of RAW Value from DB:", typeof val);
 
         if (typeof val === 'string' && val.trim() !== '') {
-          console.log("PROFILE_PAGE: Successfully fetched support number from DB as string:", val);
+          console.log("PROFILE_PAGE: SUCCESS: Fetched and using support number from DB as string:", val);
           setSupportPhoneNumber(val);
         } else {
-          // Log why it failed
+          // توضيح سبب استخدام الرقم الافتراضي
           if (typeof val !== 'string') {
-            console.warn(`PROFILE_PAGE: Support phone number found, but its type is NOT string. Type: ${typeof val}. Value: ${JSON.stringify(val)}. Using fallback.`);
-          } else if (val.trim() === '') {
-            console.warn(`PROFILE_PAGE: Support phone number found as string, but it's EMPTY or whitespace. Value: "${val}". Using fallback.`);
-          } else {
-             console.warn(`PROFILE_PAGE: Support phone number found, but condition (typeof val === 'string' && val.trim() !== '') failed for unknown reason. Value: "${val}". Using fallback.`);
+            console.warn(`PROFILE_PAGE: FALLBACK_USED: Support phone number was found, but its type is NOT 'string'. Actual type: '${typeof val}'. Actual value from DB: ${JSON.stringify(val)}. Expected a direct string value like "07..." or "+962...". Please check Firebase data structure for 'support/contactPhoneNumber'.`);
+          } else { // val is a string but it's empty or whitespace
+            console.warn(`PROFILE_PAGE: FALLBACK_USED: Support phone number from DB is an EMPTY string or just whitespace. Value: "${val}".`);
           }
           setSupportPhoneNumber("0775580440");
         }
       } else {
-        console.warn("PROFILE_PAGE: Support phone number NOT FOUND in dbRider at support/contactPhoneNumber. Using fallback '0775580440'.");
+        console.warn("PROFILE_PAGE: FALLBACK_USED: Node 'support/contactPhoneNumber' NOT FOUND in dbRider. Using default '0775580440'.");
         setSupportPhoneNumber("0775580440");
       }
     } catch (error) {
-      console.error("PROFILE_PAGE: Error fetching support phone number:", error);
+      console.error("PROFILE_PAGE: ERROR during fetch support phone number:", error);
       toast({ title: "خطأ", description: "لم نتمكن من تحميل رقم هاتف الدعم. سيتم استخدام الرقم الافتراضي.", variant: "destructive" });
       setSupportPhoneNumber("0775580440"); // Fallback on error
     }
@@ -123,7 +122,7 @@ export default function ProfilePage() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(authRider, (user) => {
-      setIsLoading(true); // Set loading true at the start of auth check
+      setIsLoading(true); 
       if (user) {
         setCurrentUserAuth(user);
         Promise.all([fetchUserData(user), fetchSupportPhoneNumber()]).then(() => {
@@ -132,7 +131,7 @@ export default function ProfilePage() {
       } else {
         setCurrentUserAuth(null);
         setUserData(null);
-        setSupportPhoneNumber(null);
+        setSupportPhoneNumber(null); // Clear support number on sign out
         router.push('/auth/signin');
         setIsLoading(false);
       }
@@ -190,29 +189,25 @@ export default function ProfilePage() {
   const handleWhatsAppSupport = () => {
     console.log("PROFILE_PAGE: handleWhatsAppSupport called. Current supportPhoneNumber state:", supportPhoneNumber);
     if (supportPhoneNumber && supportPhoneNumber.trim() !== "") {
-      let whatsappFormattedNumber = supportPhoneNumber.replace(/\s+/g, ''); // Remove spaces
+      let whatsappFormattedNumber = supportPhoneNumber.replace(/\s+/g, ''); 
 
-      if (whatsappFormattedNumber.startsWith('+')) { // Remove leading + for wa.me links
+      if (whatsappFormattedNumber.startsWith('+')) { 
         whatsappFormattedNumber = whatsappFormattedNumber.substring(1);
       }
-
-      // Ensure it starts with country code if not already (assuming Jordanian numbers)
-      if (whatsappFormattedNumber.startsWith('07')) { // e.g., 077..., 078..., 079...
+      
+      if (whatsappFormattedNumber.startsWith('07')) { 
         whatsappFormattedNumber = `962${whatsappFormattedNumber.substring(1)}`;
       } else if (whatsappFormattedNumber.startsWith('7') && whatsappFormattedNumber.length === 9 && ['7','8','9'].includes(whatsappFormattedNumber.charAt(0))) {
-        // Handles cases like 77xxxxxxx, 78xxxxxxx, 79xxxxxxx (9 digits)
-         if (!whatsappFormattedNumber.startsWith('962')) { // Double check it doesn't already have 962
+         if (!whatsappFormattedNumber.startsWith('962')) { 
             whatsappFormattedNumber = `962${whatsappFormattedNumber}`;
          }
       }
-      // Numbers already in international format like 9627... will pass through.
-
+      
       console.log("PROFILE_PAGE: Opening WhatsApp with number for wa.me:", whatsappFormattedNumber);
       window.open(`https://wa.me/${whatsappFormattedNumber}`, '_blank', 'noopener,noreferrer');
     } else {
       console.warn("PROFILE_PAGE: WhatsApp button clicked, but supportPhoneNumber is null, empty, or fallback. Using hardcoded fallback for wa.me: 962775580440");
       toast({ title: "رقم الدعم غير متوفر", description: "عذراً، رقم هاتف الدعم غير متاح حالياً. الرجاء المحاولة لاحقاً أو الاتصال بالرقم الافتراضي.", variant: "default" });
-      // Fallback directly in the wa.me link if all else fails and state is still the default app fallback
       window.open(`https://wa.me/962775580440`, '_blank', 'noopener,noreferrer');
     }
   };
@@ -312,3 +307,5 @@ export default function ProfilePage() {
     </PageWrapper>
   );
 }
+
+    
