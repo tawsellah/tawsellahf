@@ -3,7 +3,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Menu, X, LogIn, UserPlus, Route, LogOut, Phone, History, Search } from 'lucide-react'; // Added Search icon
+import { Menu, X, LogIn, UserPlus, Route, LogOut, Phone, History, Search, User as UserIcon } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/sheet';
@@ -23,11 +23,6 @@ const defaultNavLinks = [
   { href: '/auth/signin', label: 'تسجيل الدخول', icon: LogIn, id: 'signin' },
   { href: '/auth/signup', label: 'إنشاء حساب جديد', icon: UserPlus, id: 'signup' },
 ];
-
-// This array is no longer static for logged-in users, it's built dynamically.
-// const loggedInNavLinks = [
-//   { href: '/my-trips', label: 'رحلاتي', icon: History, id: 'my-trips'}
-// ];
 
 export function Navbar() {
   const pathname = usePathname();
@@ -54,9 +49,9 @@ export function Navbar() {
               phoneNumber: dbUserData.phoneNumber || "غير متوفر",
             });
           } else {
-            setUserData({
-              fullName: user.email || "مستخدم",
-              phoneNumber: "غير متوفر",
+            setUserData({ // User in Auth but not DB
+              fullName: user.displayName || user.email || "مستخدم",
+              phoneNumber: user.phoneNumber || "يرجى التحديث",
             });
           }
         } catch (error) {
@@ -85,20 +80,24 @@ export function Navbar() {
     }
   };
   
-  const NavLinkItem = ({ href, label, icon: Icon, isMobile, id }: {href: string, label: string, icon: React.ElementType, isMobile?: boolean, id: string}) => (
+  const NavLinkItem = ({ href, label, icon: Icon, isMobile, id, onClickOverride }: {href: string, label: string, icon: React.ElementType, isMobile?: boolean, id: string, onClickOverride?: () => void}) => (
     <Link href={href} passHref legacyBehavior>
       <a
-        onClick={() => {
+        onClick={(e) => {
+          if (onClickOverride) {
+            e.preventDefault(); // Prevent Link default navigation if onClickOverride exists
+            onClickOverride();
+          }
           if (isMobile && isMobileMenuOpen) setIsMobileMenuOpen(false);
         }}
         className={cn(
           "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors duration-300 ease-in-out w-full md:w-auto justify-start md:justify-center",
-          pathname === href
+          pathname === href && !onClickOverride 
             ? "bg-primary text-primary-foreground"
             : "text-foreground hover:bg-accent hover:text-accent-foreground",
           "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
         )}
-        aria-current={pathname === href ? "page" : undefined}
+        aria-current={pathname === href && !onClickOverride ? "page" : undefined}
       >
         <Icon className="h-5 w-5" />
         <span>{label}</span>
@@ -126,42 +125,62 @@ export function Navbar() {
     if (currentUserAuth && userData) {
       // Logged-in state
       const dynamicNavLinks = [];
-      if (pathname === '/my-trips') {
+      if (pathname === '/') {
+        if (pathname !== '/profile') dynamicNavLinks.push({ href: '/profile', label: 'ملفي الشخصي', icon: UserIcon, id: 'profile-dynamic1' });
+        dynamicNavLinks.push({ href: '/my-trips', label: 'رحلاتي', icon: History, id: 'my-trips-dynamic1' });
+      } else if (pathname === '/my-trips') {
+        if (pathname !== '/profile') dynamicNavLinks.push({ href: '/profile', label: 'ملفي الشخصي', icon: UserIcon, id: 'profile-dynamic2' });
         dynamicNavLinks.push({ href: '/', label: 'ابحث عن رحلة', icon: Search, id: 'search-trip-dynamic' });
-      } else {
-        dynamicNavLinks.push({ href: '/my-trips', label: 'رحلاتي', icon: History, id: 'my-trips-dynamic' });
+      } else if (pathname === '/profile') {
+         dynamicNavLinks.push({ href: '/', label: 'ابحث عن رحلة', icon: Search, id: 'search-trip-dynamic-profile' });
+         dynamicNavLinks.push({ href: '/my-trips', label: 'رحلاتي', icon: History, id: 'my-trips-dynamic-profile' });
+      } else { // For other pages like /trips/[tripId]
+        if (pathname !== '/profile') dynamicNavLinks.push({ href: '/profile', label: 'ملفي الشخصي', icon: UserIcon, id: 'profile-dynamic3' });
+        dynamicNavLinks.push({ href: '/my-trips', label: 'رحلاتي', icon: History, id: 'my-trips-dynamic3' });
+         dynamicNavLinks.push({ href: '/', label: 'ابحث عن رحلة', icon: Search, id: 'search-trip-dynamic3' });
       }
+
 
       if (isMobile) {
         return (
           <>
-            <div className="flex items-center gap-3 p-4 border-b mb-2">
-              <Avatar>
-                <AvatarImage src={currentUserAuth.photoURL || undefined} alt={userData.fullName} data-ai-hint="user avatar" />
-                <AvatarFallback>{userData.fullName.charAt(0).toUpperCase()}</AvatarFallback>
-              </Avatar>
-              <div>
-                <p className="font-semibold">{userData.fullName}</p>
-                <p className="text-xs text-muted-foreground flex items-center gap-1">
-                  <Phone className="h-3 w-3" /> 
-                  {userData.phoneNumber}
-                </p>
-              </div>
-            </div>
+            <Link href="/profile" passHref legacyBehavior>
+              <a 
+                className="flex items-center gap-3 p-4 border-b hover:bg-accent/50 transition-colors"
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  router.push('/profile');
+                }}
+              >
+                <Avatar>
+                  <AvatarImage src={currentUserAuth.photoURL || undefined} alt={userData.fullName} data-ai-hint="user avatar" />
+                  <AvatarFallback>{userData.fullName.charAt(0).toUpperCase()}</AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="font-semibold">{userData.fullName}</p>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Phone className="h-3 w-3" /> 
+                    {userData.phoneNumber}
+                  </p>
+                </div>
+              </a>
+            </Link>
             {dynamicNavLinks.map((link) => (
               <NavLinkItem key={link.id} {...link} isMobile={isMobile} id={link.id} />
             ))}
-            <Button
-              variant="ghost"
-              onClick={() => {
-                handleSignOut();
-                if (isMobileMenuOpen) setIsMobileMenuOpen(false);
-              }}
-              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-accent hover:text-accent-foreground justify-start"
-            >
-              <LogOut className="h-5 w-5" />
-              <span>تسجيل الخروج</span>
-            </Button>
+            <div className="mt-auto p-4 border-t">
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  handleSignOut();
+                  if (isMobileMenuOpen) setIsMobileMenuOpen(false);
+                }}
+                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-destructive-foreground bg-destructive hover:bg-destructive/90 justify-center"
+              >
+                <LogOut className="h-5 w-5" />
+                <span>تسجيل الخروج</span>
+              </Button>
+            </div>
           </>
         );
       } else {
@@ -171,17 +190,23 @@ export function Navbar() {
             {dynamicNavLinks.map((link) => (
               <NavLinkItem key={link.id} {...link} isMobile={isMobile} id={link.id} />
             ))}
-            <Avatar>
-              <AvatarImage src={currentUserAuth.photoURL || undefined} alt={userData.fullName} data-ai-hint="user avatar" />
-              <AvatarFallback>{userData.fullName.charAt(0).toUpperCase()}</AvatarFallback>
-            </Avatar>
-            <div className="text-sm text-right">
-              <div className="font-medium text-foreground">{userData.fullName}</div>
-              <div className="text-xs text-muted-foreground dir-ltr flex items-center justify-end gap-1">
-                {userData.phoneNumber}
-                <Phone className="h-3 w-3" /> 
-              </div>
-            </div>
+            <Link href="/profile" passHref legacyBehavior>
+              <a className="flex items-center gap-2 cursor-pointer hover:bg-accent/50 p-2 rounded-md transition-colors"
+                 onClick={() => router.push('/profile')}
+              >
+                <Avatar>
+                  <AvatarImage src={currentUserAuth.photoURL || undefined} alt={userData.fullName} data-ai-hint="user avatar" />
+                  <AvatarFallback>{userData.fullName.charAt(0).toUpperCase()}</AvatarFallback>
+                </Avatar>
+                <div className="text-sm text-right">
+                  <div className="font-medium text-foreground">{userData.fullName}</div>
+                  <div className="text-xs text-muted-foreground dir-ltr flex items-center justify-end gap-1">
+                    {userData.phoneNumber}
+                    <Phone className="h-3 w-3" /> 
+                  </div>
+                </div>
+              </a>
+            </Link>
             <Button variant="outline" size="sm" onClick={handleSignOut} className="rounded-lg">
               <LogOut className="ms-2 h-4 w-4" />
               تسجيل الخروج
@@ -218,8 +243,8 @@ export function Navbar() {
                 <Menu className="h-6 w-6" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="right" className="w-[280px] bg-card p-0 pt-6">
-              <div className="mb-6 flex items-center justify-between px-6">
+            <SheetContent side="right" className="w-[280px] bg-card p-0 flex flex-col"> {/* Added flex flex-col */}
+              <div className="mb-0 flex items-center justify-between px-6 py-4 border-b"> {/* Adjusted padding */}
                  <Link href="/" passHref legacyBehavior>
                   <a onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-2 text-lg font-bold text-primary">
                     <Route className="h-6 w-6" />
@@ -232,7 +257,7 @@ export function Navbar() {
                   </Button>
                 </SheetClose>
               </div>
-              <nav className="flex flex-col gap-1 px-4">
+              <nav className="flex flex-col flex-grow"> {/* Added flex-grow */}
                 {renderNavItems(true)}
               </nav>
             </SheetContent>
@@ -242,3 +267,5 @@ export function Navbar() {
     </header>
   );
 }
+
+    
