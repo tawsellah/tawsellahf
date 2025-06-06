@@ -13,14 +13,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { Loader2, User, Phone, Mail, Save, MessageSquare, ExternalLink, AlertCircle } from 'lucide-react';
+import { Loader2, User, Phone, Save, MessageSquare, ExternalLink, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 
 interface UserProfileData {
   fullName: string;
   phoneNumber: string;
-  email: string;
+  email: string; // Kept in interface for potential future use or if auth still provides it
   createdAt?: number;
   updatedAt?: number;
 }
@@ -87,7 +87,7 @@ export default function ProfilePage() {
       } else {
         const profileData: UserProfileData = {
             fullName: user.displayName || "",
-            phoneNumber: user.phoneNumber || "", // Auth might not have this for email/pass
+            phoneNumber: user.phoneNumber || "", 
             email: user.email || ""
         };
         setUserData(profileData);
@@ -126,38 +126,44 @@ export default function ProfilePage() {
     try {
       const userRef = ref(dbRider, `users/${currentUserAuth.uid}`);
       
-      const updates: Partial<UserProfileData> & {updatedAt: any, email: string, uid: string, createdAt?: any} = {
+      // Email is intentionally not part of the update payload to the database here
+      const updates: Partial<Omit<UserProfileData, 'email'>> & {updatedAt: any, uid: string, createdAt?: any, email?: string } = {
         uid: currentUserAuth.uid,
         fullName: data.fullName,
         phoneNumber: data.phoneNumber,
-        email: userData?.email || currentUserAuth.email || "", 
-        updatedAt: serverTimestamp() // Use serverTimestamp for consistency
+        updatedAt: serverTimestamp()
       };
+      
+      // Persist email if it was loaded, or if the user is new in DB, from Auth.
+      // This part is tricky if email is truly "removed" from user management on this page.
+      // For now, let's assume we still store it in the DB if it comes from Auth or was already there.
+      if (userData?.email || currentUserAuth.email) {
+          updates.email = userData?.email || currentUserAuth.email || "";
+      }
+
 
       const userSnapshot = await get(userRef);
       if (!userSnapshot.exists()) {
-        updates.createdAt = serverTimestamp(); // Set createdAt if user record is new in DB
+        updates.createdAt = serverTimestamp(); 
       } else {
-        // Preserve existing createdAt if it exists
         const existingData = userSnapshot.val();
         if (existingData.createdAt) {
             updates.createdAt = existingData.createdAt;
         } else {
-            updates.createdAt = serverTimestamp(); // Fallback if somehow missing
+            updates.createdAt = serverTimestamp(); 
         }
       }
 
       await update(userRef, updates);
 
-      // Optimistically update local state, but prefer re-fetching or relying on Firebase listeners for production
       setUserData(prev => ({
         ...(prev || {}), 
         ...updates, 
-        email: updates.email, // ensure email is part of UserProfileData
-        updatedAt: Date.now() // Approximate client-side, actual is serverTimestamp
+        email: updates.email || prev?.email || "", // Ensure email state is consistent
+        updatedAt: Date.now() 
        } as UserProfileData)); 
        
-      form.reset(data); // Reset form with new saved values
+      form.reset(data); 
       toast({ title: "تم بنجاح", description: "تم تحديث بيانات ملفك الشخصي.", className: "bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-200 border-green-300 dark:border-green-600"});
     } catch (error: any) {
       console.error("Error updating profile:", error);
@@ -169,15 +175,11 @@ export default function ProfilePage() {
 
   const handleWhatsAppSupport = () => {
     if (supportPhoneNumber) {
-      let whatsappFormattedNumber = supportPhoneNumber.replace(/\s+/g, ''); // Remove spaces
+      let whatsappFormattedNumber = supportPhoneNumber.replace(/\s+/g, ''); 
       if (whatsappFormattedNumber.startsWith('0')) {
         whatsappFormattedNumber = `962${whatsappFormattedNumber.substring(1)}`;
       } else if (!whatsappFormattedNumber.startsWith('962')) {
-        // If it's a local number without leading 0 and no country code, prepend 962
-        // This case might need adjustment based on how numbers are stored
-        // For now, assuming if it's not starting with 0 or 962, it might be missing country code.
-        // To be safe, this might need more robust parsing or a fixed format in DB.
-        // Let's assume for now numbers from DB are either 07... or 9627...
+        // Potentially add 962 if it's a local number without leading 0
       }
       window.open(`https://wa.me/${whatsappFormattedNumber}`, '_blank', 'noopener,noreferrer');
     } else {
@@ -255,15 +257,7 @@ export default function ProfilePage() {
                   </FormItem>
                 )}
               />
-              <FormItem>
-                <FormLabel className="flex items-center gap-2">
-                  <Mail className="h-5 w-5 text-muted-foreground" />
-                  البريد الإلكتروني
-                </FormLabel>
-                <Input type="email" value={userData.email || ''} readOnly disabled className="bg-muted/50 cursor-not-allowed" />
-                <p className="text-xs text-muted-foreground pt-1">البريد الإلكتروني مرتبط بحسابك ولا يمكن تغييره من هنا.</p>
-              </FormItem>
-
+              
               <Button type="submit" className="w-full p-3 text-base" disabled={isSaving}>
                 {isSaving ? <Loader2 className="ms-2 h-5 w-5 animate-spin" /> : <Save className="ms-2 h-5 w-5" />}
                 {isSaving ? "جارِ الحفظ..." : "حفظ التغييرات"}
@@ -287,5 +281,3 @@ export default function ProfilePage() {
     </PageWrapper>
   );
 }
-
-    
