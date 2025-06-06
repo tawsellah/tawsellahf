@@ -57,22 +57,45 @@ export default function ProfilePage() {
 
       if (snapshot.exists()) {
         const val = snapshot.val();
-        // رسائل تشخيص مفصلة
         console.log("PROFILE_PAGE: RAW Value from DB (support/contactPhoneNumber):", JSON.stringify(val));
         console.log("PROFILE_PAGE: Type of RAW Value from DB:", typeof val);
 
+        let phoneNumberToUse: string | null = null;
+
         if (typeof val === 'string' && val.trim() !== '') {
-          console.log("PROFILE_PAGE: SUCCESS: Fetched and using support number from DB as string:", val);
-          setSupportPhoneNumber(val);
+          console.log("PROFILE_PAGE: SUCCESS: Fetched and using support number from DB as direct string:", val);
+          phoneNumberToUse = val;
+        } else if (typeof val === 'object' && val !== null) {
+          console.log("PROFILE_PAGE: Value is an object. Attempting to extract first key as phone number.");
+          const keys = Object.keys(val);
+          if (keys.length > 0) {
+            const firstKey = keys[0];
+            if (firstKey && (firstKey.startsWith('+') || /^\d+$/.test(firstKey.replace(/\s/g, '')))) {
+              console.log("PROFILE_PAGE: SUCCESS: Extracted phone number from object key:", firstKey);
+              phoneNumberToUse = firstKey;
+            } else {
+              console.warn(`PROFILE_PAGE: Extracted key "${firstKey}" from object does not look like a valid phone number. Using fallback.`);
+            }
+          } else {
+            console.warn("PROFILE_PAGE: Value is an empty object. Using fallback.");
+          }
         } else {
-          // توضيح سبب استخدام الرقم الافتراضي
-          if (typeof val !== 'string') {
-            console.warn(`PROFILE_PAGE: FALLBACK_USED: Support phone number was found, but its type is NOT 'string'. Actual type: '${typeof val}'. Actual value from DB: ${JSON.stringify(val)}. Expected a direct string value like "07..." or "+962...". Please check Firebase data structure for 'support/contactPhoneNumber'.`);
+           if (typeof val !== 'string' && val !== null) { // Check if not string and not null explicitly
+            console.warn(`PROFILE_PAGE: FALLBACK_USED: Support phone number was found, but its type is NOT 'string' or a recognized 'object'. Actual type: '${typeof val}'. Actual value from DB: ${JSON.stringify(val)}. Expected a direct string value or an object with the phone number as a key. Please check Firebase data structure for 'support/contactPhoneNumber'.`);
+          } else if (val === null) {
+             console.warn(`PROFILE_PAGE: FALLBACK_USED: Support phone number node 'support/contactPhoneNumber' exists but its value is NULL. Using default '0775580440'.`);
           } else { // val is a string but it's empty or whitespace
             console.warn(`PROFILE_PAGE: FALLBACK_USED: Support phone number from DB is an EMPTY string or just whitespace. Value: "${val}".`);
           }
+        }
+
+        if (phoneNumberToUse) {
+          setSupportPhoneNumber(phoneNumberToUse);
+        } else {
+          console.warn("PROFILE_PAGE: FALLBACK_USED (after checks): Could not determine a valid phone number from DB. Using default '0775580440'.");
           setSupportPhoneNumber("0775580440");
         }
+
       } else {
         console.warn("PROFILE_PAGE: FALLBACK_USED: Node 'support/contactPhoneNumber' NOT FOUND in dbRider. Using default '0775580440'.");
         setSupportPhoneNumber("0775580440");
@@ -131,7 +154,7 @@ export default function ProfilePage() {
       } else {
         setCurrentUserAuth(null);
         setUserData(null);
-        setSupportPhoneNumber(null); // Clear support number on sign out
+        setSupportPhoneNumber(null); 
         router.push('/auth/signin');
         setIsLoading(false);
       }
@@ -197,10 +220,6 @@ export default function ProfilePage() {
       
       if (whatsappFormattedNumber.startsWith('07')) { 
         whatsappFormattedNumber = `962${whatsappFormattedNumber.substring(1)}`;
-      } else if (whatsappFormattedNumber.startsWith('7') && whatsappFormattedNumber.length === 9 && ['7','8','9'].includes(whatsappFormattedNumber.charAt(0))) {
-         if (!whatsappFormattedNumber.startsWith('962')) { 
-            whatsappFormattedNumber = `962${whatsappFormattedNumber}`;
-         }
       }
       
       console.log("PROFILE_PAGE: Opening WhatsApp with number for wa.me:", whatsappFormattedNumber);
