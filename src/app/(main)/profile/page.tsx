@@ -49,19 +49,32 @@ export default function ProfilePage() {
   });
 
   const fetchSupportPhoneNumber = useCallback(async () => {
+    console.log("PROFILE_PAGE: Attempting to fetch support phone number...");
     try {
       const supportNumRef = ref(dbRider, 'support/contactPhoneNumber');
       const snapshot = await get(supportNumRef);
-      if (snapshot.exists() && typeof snapshot.val() === 'string') {
-        setSupportPhoneNumber(snapshot.val() as string);
+      console.log("PROFILE_PAGE: Snapshot for support/contactPhoneNumber exists:", snapshot.exists());
+
+      if (snapshot.exists()) {
+        const val = snapshot.val();
+        console.log("PROFILE_PAGE: Value from support/contactPhoneNumber:", JSON.stringify(val)); // Log the raw value
+        console.log("PROFILE_PAGE: Typeof value from support/contactPhoneNumber:", typeof val);
+
+        if (typeof val === 'string' && val.trim() !== '') {
+          console.log("PROFILE_PAGE: Successfully fetched support number from DB as string:", val);
+          setSupportPhoneNumber(val);
+        } else {
+          console.warn("PROFILE_PAGE: Support phone number found in DB, but it's NOT a valid non-empty string. Value:", JSON.stringify(val), ". Using fallback '0775580440'.");
+          setSupportPhoneNumber("0775580440");
+        }
       } else {
-        console.warn("Support phone number not found or not a string in dbRider at support/contactPhoneNumber. Using fallback '0775580440'.");
-        setSupportPhoneNumber("0775580440"); 
+        console.warn("PROFILE_PAGE: Support phone number NOT FOUND in dbRider at support/contactPhoneNumber. Using fallback '0775580440'.");
+        setSupportPhoneNumber("0775580440");
       }
     } catch (error) {
-      console.error("Error fetching support phone number:", error);
+      console.error("PROFILE_PAGE: Error fetching support phone number:", error);
       toast({ title: "خطأ", description: "لم نتمكن من تحميل رقم هاتف الدعم. سيتم استخدام الرقم الافتراضي.", variant: "destructive" });
-      setSupportPhoneNumber("0775580440"); 
+      setSupportPhoneNumber("0775580440");
     }
   }, [toast]);
 
@@ -85,7 +98,7 @@ export default function ProfilePage() {
       } else {
         const profileData: UserProfileData = {
             fullName: user.displayName || "",
-            phoneNumber: user.phoneNumber || "", 
+            phoneNumber: user.phoneNumber || "",
         };
         setUserData(profileData);
         form.reset({
@@ -103,17 +116,19 @@ export default function ProfilePage() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(authRider, (user) => {
+      setIsLoading(true); // Set loading true at the start of auth check
       if (user) {
         setCurrentUserAuth(user);
-        fetchUserData(user);
-        fetchSupportPhoneNumber(); 
+        Promise.all([fetchUserData(user), fetchSupportPhoneNumber()]).then(() => {
+          setIsLoading(false);
+        });
       } else {
         setCurrentUserAuth(null);
         setUserData(null);
-        setSupportPhoneNumber(null); 
+        setSupportPhoneNumber(null);
         router.push('/auth/signin');
+        setIsLoading(false);
       }
-      setIsLoading(false);
     });
     return () => unsubscribe();
   }, [router, fetchUserData, fetchSupportPhoneNumber]);
@@ -123,40 +138,39 @@ export default function ProfilePage() {
     setIsSaving(true);
     try {
       const userRef = ref(dbRider, `users/${currentUserAuth.uid}`);
-      
+
       const updates: Partial<Omit<UserProfileData, 'email'>> & {updatedAt: any, uid: string, createdAt?: any, email?: string } = {
         uid: currentUserAuth.uid,
         fullName: data.fullName,
         phoneNumber: data.phoneNumber,
         updatedAt: serverTimestamp()
       };
-      
-      if (currentUserAuth.email) { 
-          updates.email = currentUserAuth.email; 
-      }
 
+      if (currentUserAuth.email) {
+          updates.email = currentUserAuth.email;
+      }
 
       const userSnapshot = await get(userRef);
       if (!userSnapshot.exists()) {
-        updates.createdAt = serverTimestamp(); 
+        updates.createdAt = serverTimestamp();
       } else {
         const existingData = userSnapshot.val();
         if (existingData.createdAt) {
             updates.createdAt = existingData.createdAt;
         } else {
-            updates.createdAt = serverTimestamp(); 
+            updates.createdAt = serverTimestamp();
         }
       }
 
       await update(userRef, updates);
 
       setUserData(prev => ({
-        ...(prev || { fullName: "", phoneNumber: ""}), 
-        ...updates, 
-        updatedAt: Date.now() 
-       } as UserProfileData)); 
-       
-      form.reset(data); 
+        ...(prev || { fullName: "", phoneNumber: ""}),
+        ...updates,
+        updatedAt: Date.now()
+       } as UserProfileData));
+
+      form.reset(data);
       toast({ title: "تم بنجاح", description: "تم تحديث بيانات ملفك الشخصي.", className: "bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-200 border-green-300 dark:border-green-600"});
     } catch (error: any) {
       console.error("Error updating profile:", error);
@@ -167,18 +181,35 @@ export default function ProfilePage() {
   };
 
   const handleWhatsAppSupport = () => {
-    if (supportPhoneNumber) {
-      let whatsappFormattedNumber = supportPhoneNumber.replace(/\s+/g, ''); 
-      if (whatsappFormattedNumber.startsWith('0')) {
-        whatsappFormattedNumber = `962${whatsappFormattedNumber.substring(1)}`;
-      } else if (!whatsappFormattedNumber.startsWith('962') && whatsappFormattedNumber.length === 9 && ['77','78','79'].includes(whatsappFormattedNumber.substring(0,2))) {
-        whatsappFormattedNumber = `962${whatsappFormattedNumber}`;
+    console.log("PROFILE_PAGE: handleWhatsAppSupport called. Current supportPhoneNumber state:", supportPhoneNumber);
+    if (supportPhoneNumber && supportPhoneNumber.trim() !== "") {
+      let whatsappFormattedNumber = supportPhoneNumber.replace(/\s+/g, ''); // Remove spaces
+
+      if (whatsappFormattedNumber.startsWith('+')) { // Remove leading + for wa.me links
+        whatsappFormattedNumber = whatsappFormattedNumber.substring(1);
       }
+
+      // Ensure it starts with country code if not already (assuming Jordanian numbers)
+      if (whatsappFormattedNumber.startsWith('07')) { // e.g., 077..., 078..., 079...
+        whatsappFormattedNumber = `962${whatsappFormattedNumber.substring(1)}`;
+      } else if (whatsappFormattedNumber.startsWith('7') && whatsappFormattedNumber.length === 9 && ['7','8','9'].includes(whatsappFormattedNumber.charAt(0))) {
+        // Handles cases like 77xxxxxxx, 78xxxxxxx, 79xxxxxxx (9 digits)
+         if (!whatsappFormattedNumber.startsWith('962')) { // Double check it doesn't already have 962
+            whatsappFormattedNumber = `962${whatsappFormattedNumber}`;
+         }
+      }
+      // Numbers already in international format like 9627... will pass through.
+
+      console.log("PROFILE_PAGE: Opening WhatsApp with number for wa.me:", whatsappFormattedNumber);
       window.open(`https://wa.me/${whatsappFormattedNumber}`, '_blank', 'noopener,noreferrer');
     } else {
+      console.warn("PROFILE_PAGE: WhatsApp button clicked, but supportPhoneNumber is null, empty, or fallback. Using hardcoded fallback for wa.me: 962775580440");
       toast({ title: "رقم الدعم غير متوفر", description: "عذراً، رقم هاتف الدعم غير متاح حالياً. الرجاء المحاولة لاحقاً أو الاتصال بالرقم الافتراضي.", variant: "default" });
+      // Fallback directly in the wa.me link if all else fails and state is still the default app fallback
+      window.open(`https://wa.me/962775580440`, '_blank', 'noopener,noreferrer');
     }
   };
+
 
   if (isLoading) {
     return (
@@ -191,7 +222,7 @@ export default function ProfilePage() {
     );
   }
 
-  if (!currentUserAuth || !userData) {
+  if (!currentUserAuth) { // Removed !userData check here as it might be briefly null during initial load
     return (
       <PageWrapper>
         <div className="text-center py-10">
@@ -228,7 +259,7 @@ export default function ProfilePage() {
                       الاسم الكامل
                     </FormLabel>
                     <FormControl>
-                      <Input placeholder="مثال: أحمد محمد" {...field} />
+                      <Input placeholder="مثال: أحمد محمد" {...field} value={field.value || ""} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -244,13 +275,13 @@ export default function ProfilePage() {
                       رقم الهاتف
                     </FormLabel>
                     <FormControl>
-                      <Input type="tel" placeholder="مثال: 07XXXXXXXX" {...field} />
+                      <Input type="tel" placeholder="مثال: 07XXXXXXXX" {...field} value={field.value || ""} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              
+
               <Button type="submit" className="w-full p-3 text-base" disabled={isSaving}>
                 {isSaving ? <Loader2 className="ms-2 h-5 w-5 animate-spin" /> : <Save className="ms-2 h-5 w-5" />}
                 {isSaving ? "جارِ الحفظ..." : "حفظ التغييرات"}
@@ -259,9 +290,9 @@ export default function ProfilePage() {
           </Form>
         </CardContent>
         <CardFooter className="flex flex-col gap-4 pt-6 border-t">
-           <Button 
-            onClick={handleWhatsAppSupport} 
-            disabled={!supportPhoneNumber || isSaving} 
+           <Button
+            onClick={handleWhatsAppSupport}
+            disabled={isSaving} // Enable button even if number is loading, will use fallback if necessary
             className="w-full p-3 text-base bg-[#25D366] text-white hover:bg-[#1DAE54] focus:bg-[#1DAE54] focus:ring-[#25D366]"
             aria-label="تواصل مع الدعم عبر واتساب"
             >
@@ -274,6 +305,5 @@ export default function ProfilePage() {
     </PageWrapper>
   );
 }
-    
 
     
