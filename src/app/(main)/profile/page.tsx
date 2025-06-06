@@ -42,14 +42,6 @@ export default function ProfilePage() {
   const [isSaving, setIsSaving] = useState(false);
   const [supportPhoneNumber, setSupportPhoneNumber] = useState<string>(FALLBACK_SUPPORT_PHONE);
 
-  const form = useForm<ProfileFormData>({
-    resolver: zodResolver(profileFormSchema),
-    defaultValues: {
-      fullName: "",
-      phoneNumber: "",
-    },
-  });
-
   const fetchSupportPhoneNumber = useCallback(async () => {
     const specificPath = 'support/contactPhoneNumber/contact'; // The new specific path
     console.log(`PROFILE_PAGE: Attempting to fetch support phone number from path: ${specificPath}...`);
@@ -65,12 +57,18 @@ export default function ProfilePage() {
 
         if (typeof val === 'string' && val.trim() !== '') {
           setSupportPhoneNumber(val.trim());
-          console.log(`PROFILE_PAGE: SUCCESS: Updated supportPhoneNumber state to: "${val.trim()}" from ${specificPath}`);
+          console.log(`PROFILE_PAGE: SUCCESS: Updated supportPhoneNumber state to: "${val.trim()}" (from string value in DB) from ${specificPath}`);
+        } else if (typeof val === 'number') { // Check if value is a number
+          const stringVal = String(val);
+          setSupportPhoneNumber(stringVal);
+          console.log(`PROFILE_PAGE: SUCCESS: Updated supportPhoneNumber state to: "${stringVal}" (converted from number in DB) from ${specificPath}`);
         } else {
-          if (typeof val !== 'string') {
-            console.warn(`PROFILE_PAGE_DEBUG: FALLBACK_REASON: Value from DB at ${specificPath} is NOT a string. Type: ${typeof val}. Value: ${JSON.stringify(val)}. Using fallback.`);
-          } else { // val.trim() === ''
-            console.warn(`PROFILE_PAGE_DEBUG: FALLBACK_REASON: Value from DB at ${specificPath} is an EMPTY string or whitespace. Using fallback.`);
+          if (val === null) {
+             console.warn(`PROFILE_PAGE_DEBUG: FALLBACK_REASON: Value from DB at ${specificPath} is NULL. Using fallback.`);
+          } else if (typeof val !== 'string') { // Already handled number, so this covers other non-strings like object, boolean
+            console.warn(`PROFILE_PAGE_DEBUG: FALLBACK_REASON: Value from DB at ${specificPath} is NOT a string or number. Type: ${typeof val}. Value: ${JSON.stringify(val)}. Using fallback.`);
+          } else { // val.trim() === '' (empty string)
+            console.warn(`PROFILE_PAGE_DEBUG: FALLBACK_REASON: Value from DB at ${specificPath} is an EMPTY string or whitespace. Value: "${val}". Using fallback.`);
           }
           setSupportPhoneNumber(FALLBACK_SUPPORT_PHONE);
         }
@@ -123,7 +121,7 @@ export default function ProfilePage() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(authRider, (user) => {
-      setIsLoading(true); 
+      setIsLoading(true);
       if (user) {
         setCurrentUserAuth(user);
         Promise.all([fetchUserData(user), fetchSupportPhoneNumber()]).then(() => {
@@ -188,32 +186,34 @@ export default function ProfilePage() {
 
   const handleWhatsAppSupport = () => {
     console.log("PROFILE_PAGE: handleWhatsAppSupport called. Current supportPhoneNumber state:", supportPhoneNumber);
-    if (!supportPhoneNumber) {
-      toast({ title: "خطأ", description: "رقم هاتف الدعم غير متوفر حاليًا.", variant: "destructive" });
-      return;
+    if (!supportPhoneNumber || supportPhoneNumber === FALLBACK_SUPPORT_PHONE && supportPhoneNumber !== "962796703099" && supportPhoneNumber !== "+962796703099" ) { // Check if it's still the fallback or an uninitialized default for safety
+       // The toast below will be shown if the DB fetch failed and it's using fallback.
+       // If you want a specific message when it's exactly the fallback, you can add it.
     }
-  
-    let numberToUse = supportPhoneNumber.replace(/\s+/g, ""); 
-  
+    if (!supportPhoneNumber) {
+        toast({ title: "خطأ", description: "رقم هاتف الدعم غير متوفر حاليًا.", variant: "destructive" });
+        return;
+    }
+
+    let numberToUse = String(supportPhoneNumber).replace(/\s+/g, ""); // Ensure it's a string and remove all whitespace
+
     if (numberToUse.startsWith("00")) {
-      numberToUse = numberToUse.substring(2); 
+      numberToUse = numberToUse.substring(2);
     }
     if (numberToUse.startsWith("+")) {
       numberToUse = numberToUse.substring(1);
     }
-  
-    if (numberToUse.startsWith("07") && numberToUse.length === 10) { // Common local format
-       numberToUse = "962" + numberToUse.substring(1); 
+
+    if (numberToUse.startsWith("07") && numberToUse.length === 10) { // Common local format for Jordan
+       numberToUse = "962" + numberToUse.substring(1);
     }
-    // If it already has 962 (e.g., from +9627...) and starts with 962, it's fine
-    // If it's just 9627... (after removing +), it's also fine
-  
-    if (!/^\d+$/.test(numberToUse)) { 
+
+    if (!/^\d+$/.test(numberToUse)) {
         console.error("PROFILE_PAGE: Invalid characters in support phone number after formatting:", numberToUse);
         toast({ title: "خطأ", description: "رقم هاتف الدعم غير صالح.", variant: "destructive" });
         return;
     }
-  
+
     const whatsappLink = `https://wa.me/${numberToUse}`;
     console.log("PROFILE_PAGE: Opening WhatsApp with number for wa.me:", numberToUse);
     console.log("PROFILE_PAGE: Full WhatsApp link:", whatsappLink);
@@ -232,7 +232,7 @@ export default function ProfilePage() {
     );
   }
 
-  if (!currentUserAuth) { 
+  if (!currentUserAuth) {
     return (
       <PageWrapper>
         <div className="text-center py-10">
@@ -304,7 +304,7 @@ export default function ProfilePage() {
             onClick={handleWhatsAppSupport}
             className="w-full p-3 text-base bg-[#25D366] text-white hover:bg-[#1DAE54] focus:bg-[#1DAE54] focus:ring-[#25D366]"
             aria-label="تواصل مع الدعم عبر واتساب"
-            disabled={isLoading} 
+            disabled={isLoading}
           >
             <MessageCircle className="ms-2 h-5 w-5" />
             تواصل مع الدعم عبر واتساب
