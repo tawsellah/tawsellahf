@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { Loader2, User, Phone, Save, AlertCircle, MessageCircle } from 'lucide-react'; // Added MessageCircle
+import { Loader2, User, Phone, Save, AlertCircle, MessageCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 
@@ -31,7 +31,7 @@ const profileFormSchema = z.object({
 
 type ProfileFormData = z.infer<typeof profileFormSchema>;
 
-const FALLBACK_SUPPORT_PHONE = "0775580440";
+const FALLBACK_SUPPORT_PHONE = "0775580440"; // Default fallback
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -51,56 +51,37 @@ export default function ProfilePage() {
   });
 
   const fetchSupportPhoneNumber = useCallback(async () => {
-    console.log("PROFILE_PAGE: Attempting to fetch support phone number...");
+    const specificPath = 'support/contactPhoneNumber/contact'; // The new specific path
+    console.log(`PROFILE_PAGE: Attempting to fetch support phone number from path: ${specificPath}...`);
     try {
-      const supportNumRef = ref(dbRider, 'support/contactPhoneNumber');
+      const supportNumRef = ref(dbRider, specificPath);
       const snapshot = await get(supportNumRef);
-      console.log("PROFILE_PAGE_DEBUG: Snapshot for support/contactPhoneNumber exists:", snapshot.exists());
+      console.log(`PROFILE_PAGE_DEBUG: Snapshot for ${specificPath} exists:`, snapshot.exists());
 
       if (snapshot.exists()) {
         const val = snapshot.val();
-        console.log("PROFILE_PAGE_DEBUG: Raw value from support/contactPhoneNumber:", JSON.stringify(val));
-        console.log("PROFILE_PAGE_DEBUG: Type of raw value:", typeof val);
-
-        let extractedPhoneNumber: string | null = null;
+        console.log(`PROFILE_PAGE_DEBUG: Raw value from ${specificPath}:`, JSON.stringify(val));
+        console.log(`PROFILE_PAGE_DEBUG: Type of raw value from ${specificPath}:`, typeof val);
 
         if (typeof val === 'string' && val.trim() !== '') {
-          extractedPhoneNumber = val.trim();
-          console.log("PROFILE_PAGE_DEBUG: Successfully fetched support number as string:", extractedPhoneNumber);
-        } else if (typeof val === 'object' && val !== null && !Array.isArray(val)) {
-          const keys = Object.keys(val);
-          if (keys.length > 0) {
-            const firstKey = keys[0];
-            // Basic validation if the key looks like a phone number
-            if ((firstKey.startsWith('+') || /^\d+$/.test(firstKey.replace(/\s/g, ''))) && firstKey.length > 5) {
-               extractedPhoneNumber = firstKey;
-               console.log(`PROFILE_PAGE_DEBUG: Extracted support number from object key: ${extractedPhoneNumber}`);
-            } else {
-              console.warn(`PROFILE_PAGE_DEBUG: FALLBACK_REASON: Value from DB is object, but first key "${firstKey}" does not look like a phone number. Using fallback.`);
-            }
-          } else {
-            console.warn(`PROFILE_PAGE_DEBUG: FALLBACK_REASON: Value from DB is an empty object. Using fallback.`);
+          setSupportPhoneNumber(val.trim());
+          console.log(`PROFILE_PAGE: SUCCESS: Updated supportPhoneNumber state to: "${val.trim()}" from ${specificPath}`);
+        } else {
+          if (typeof val !== 'string') {
+            console.warn(`PROFILE_PAGE_DEBUG: FALLBACK_REASON: Value from DB at ${specificPath} is NOT a string. Type: ${typeof val}. Value: ${JSON.stringify(val)}. Using fallback.`);
+          } else { // val.trim() === ''
+            console.warn(`PROFILE_PAGE_DEBUG: FALLBACK_REASON: Value from DB at ${specificPath} is an EMPTY string or whitespace. Using fallback.`);
           }
-        } else {
-          console.warn(`PROFILE_PAGE_DEBUG: FALLBACK_REASON: Support phone number from DB is not a string or a suitable object. Type: ${typeof val}. Value: ${JSON.stringify(val)}. Using fallback.`);
-        }
-
-        if (extractedPhoneNumber) {
-          setSupportPhoneNumber(extractedPhoneNumber);
-          console.log("PROFILE_PAGE: SUCCESS: Updated supportPhoneNumber state to:", extractedPhoneNumber);
-        } else {
           setSupportPhoneNumber(FALLBACK_SUPPORT_PHONE);
-          console.log(`PROFILE_PAGE: FALLBACK_USED: No valid phone number extracted from DB. Using fallback '${FALLBACK_SUPPORT_PHONE}'.`);
         }
-
       } else {
+        console.warn(`PROFILE_PAGE_DEBUG: FALLBACK_REASON: Path ${specificPath} NOT FOUND in dbRider. Using fallback '${FALLBACK_SUPPORT_PHONE}'.`);
         setSupportPhoneNumber(FALLBACK_SUPPORT_PHONE);
-        console.warn(`PROFILE_PAGE: FALLBACK_USED: Path support/contactPhoneNumber NOT FOUND in dbRider. Using fallback '${FALLBACK_SUPPORT_PHONE}'.`);
       }
     } catch (error) {
-      console.error("PROFILE_PAGE: ERROR fetching support phone number:", error);
+      console.error(`PROFILE_PAGE: ERROR fetching support phone number from ${specificPath}:`, error);
       toast({ title: "خطأ", description: "لم نتمكن من تحميل رقم هاتف الدعم. سيتم استخدام الرقم الافتراضي.", variant: "destructive" });
-      setSupportPhoneNumber(FALLBACK_SUPPORT_PHONE); // Fallback on error
+      setSupportPhoneNumber(FALLBACK_SUPPORT_PHONE);
     }
   }, [toast]);
 
@@ -212,30 +193,29 @@ export default function ProfilePage() {
       return;
     }
   
-    let numberToUse = supportPhoneNumber.replace(/\s+/g, ""); // Remove all spaces
+    let numberToUse = supportPhoneNumber.replace(/\s+/g, ""); 
   
     if (numberToUse.startsWith("00")) {
-      numberToUse = numberToUse.substring(2); // Remove 00 for international format
+      numberToUse = numberToUse.substring(2); 
     }
-    // Remove leading + if present, as wa.me expects number without it
     if (numberToUse.startsWith("+")) {
       numberToUse = numberToUse.substring(1);
     }
   
-    // For Jordanian numbers, if it starts with 07 (local format) and doesn't have 962, prepend 962
-    if (numberToUse.startsWith("07") && numberToUse.length === 10) {
-       numberToUse = "962" + numberToUse.substring(1); // Prepend 962 and remove leading 0
+    if (numberToUse.startsWith("07") && numberToUse.length === 10) { // Common local format
+       numberToUse = "962" + numberToUse.substring(1); 
     }
     // If it already has 962 (e.g., from +9627...) and starts with 962, it's fine
+    // If it's just 9627... (after removing +), it's also fine
   
-    if (!/^\d+$/.test(numberToUse)) { // Ensure only digits remain
+    if (!/^\d+$/.test(numberToUse)) { 
         console.error("PROFILE_PAGE: Invalid characters in support phone number after formatting:", numberToUse);
         toast({ title: "خطأ", description: "رقم هاتف الدعم غير صالح.", variant: "destructive" });
         return;
     }
   
     const whatsappLink = `https://wa.me/${numberToUse}`;
-    console.log("PROFILE_PAGE: Opening WhatsApp with formatted number for wa.me:", numberToUse);
+    console.log("PROFILE_PAGE: Opening WhatsApp with number for wa.me:", numberToUse);
     console.log("PROFILE_PAGE: Full WhatsApp link:", whatsappLink);
     window.open(whatsappLink, '_blank', 'noopener,noreferrer');
   };
@@ -334,6 +314,3 @@ export default function ProfilePage() {
     </PageWrapper>
   );
 }
-
-
-    
