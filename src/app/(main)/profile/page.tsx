@@ -31,7 +31,7 @@ const profileFormSchema = z.object({
 
 type ProfileFormData = z.infer<typeof profileFormSchema>;
 
-const FALLBACK_SUPPORT_PHONE = "0775580440"; // Default fallback
+const FALLBACK_SUPPORT_PHONE = "0775580440"; 
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -42,8 +42,16 @@ export default function ProfilePage() {
   const [isSaving, setIsSaving] = useState(false);
   const [supportPhoneNumber, setSupportPhoneNumber] = useState<string>(FALLBACK_SUPPORT_PHONE);
 
+  const form = useForm<ProfileFormData>({
+    resolver: zodResolver(profileFormSchema),
+    defaultValues: {
+      fullName: "",
+      phoneNumber: "",
+    },
+  });
+
   const fetchSupportPhoneNumber = useCallback(async () => {
-    const specificPath = 'support/contactPhoneNumber/contact'; // The new specific path
+    const specificPath = 'support/contactPhoneNumber/contact';
     console.log(`PROFILE_PAGE: Attempting to fetch support phone number from path: ${specificPath}...`);
     try {
       const supportNumRef = ref(dbRider, specificPath);
@@ -58,16 +66,16 @@ export default function ProfilePage() {
         if (typeof val === 'string' && val.trim() !== '') {
           setSupportPhoneNumber(val.trim());
           console.log(`PROFILE_PAGE: SUCCESS: Updated supportPhoneNumber state to: "${val.trim()}" (from string value in DB) from ${specificPath}`);
-        } else if (typeof val === 'number') { // Check if value is a number
+        } else if (typeof val === 'number') {
           const stringVal = String(val);
           setSupportPhoneNumber(stringVal);
           console.log(`PROFILE_PAGE: SUCCESS: Updated supportPhoneNumber state to: "${stringVal}" (converted from number in DB) from ${specificPath}`);
         } else {
           if (val === null) {
              console.warn(`PROFILE_PAGE_DEBUG: FALLBACK_REASON: Value from DB at ${specificPath} is NULL. Using fallback.`);
-          } else if (typeof val !== 'string') { // Already handled number, so this covers other non-strings like object, boolean
+          } else if (typeof val !== 'string') { 
             console.warn(`PROFILE_PAGE_DEBUG: FALLBACK_REASON: Value from DB at ${specificPath} is NOT a string or number. Type: ${typeof val}. Value: ${JSON.stringify(val)}. Using fallback.`);
-          } else { // val.trim() === '' (empty string)
+          } else { 
             console.warn(`PROFILE_PAGE_DEBUG: FALLBACK_REASON: Value from DB at ${specificPath} is an EMPTY string or whitespace. Value: "${val}". Using fallback.`);
           }
           setSupportPhoneNumber(FALLBACK_SUPPORT_PHONE);
@@ -186,16 +194,15 @@ export default function ProfilePage() {
 
   const handleWhatsAppSupport = () => {
     console.log("PROFILE_PAGE: handleWhatsAppSupport called. Current supportPhoneNumber state:", supportPhoneNumber);
-    if (!supportPhoneNumber || supportPhoneNumber === FALLBACK_SUPPORT_PHONE && supportPhoneNumber !== "962796703099" && supportPhoneNumber !== "+962796703099" ) { // Check if it's still the fallback or an uninitialized default for safety
-       // The toast below will be shown if the DB fetch failed and it's using fallback.
-       // If you want a specific message when it's exactly the fallback, you can add it.
+    if (!supportPhoneNumber || supportPhoneNumber === FALLBACK_SUPPORT_PHONE && supportPhoneNumber !== "962796703099" && supportPhoneNumber !== "+962796703099" ) {
+       // Fallback logic
     }
     if (!supportPhoneNumber) {
         toast({ title: "خطأ", description: "رقم هاتف الدعم غير متوفر حاليًا.", variant: "destructive" });
         return;
     }
 
-    let numberToUse = String(supportPhoneNumber).replace(/\s+/g, ""); // Ensure it's a string and remove all whitespace
+    let numberToUse = String(supportPhoneNumber).replace(/\s+/g, ""); 
 
     if (numberToUse.startsWith("00")) {
       numberToUse = numberToUse.substring(2);
@@ -204,7 +211,7 @@ export default function ProfilePage() {
       numberToUse = numberToUse.substring(1);
     }
 
-    if (numberToUse.startsWith("07") && numberToUse.length === 10) { // Common local format for Jordan
+    if (numberToUse.startsWith("07") && numberToUse.length === 10) { 
        numberToUse = "962" + numberToUse.substring(1);
     }
 
