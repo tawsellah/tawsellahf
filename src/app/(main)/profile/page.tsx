@@ -73,7 +73,7 @@ export default function ProfilePage() {
         } else {
           if (val === null) {
              console.warn(`PROFILE_PAGE_DEBUG: FALLBACK_REASON: Value from DB at ${specificPath} is NULL. Using fallback.`);
-          } else if (typeof val !== 'string') { 
+          } else if (typeof val !== 'string' && typeof val !== 'number') { 
             console.warn(`PROFILE_PAGE_DEBUG: FALLBACK_REASON: Value from DB at ${specificPath} is NOT a string or number. Type: ${typeof val}. Value: ${JSON.stringify(val)}. Using fallback.`);
           } else { 
             console.warn(`PROFILE_PAGE_DEBUG: FALLBACK_REASON: Value from DB at ${specificPath} is an EMPTY string or whitespace. Value: "${val}". Using fallback.`);
@@ -194,9 +194,6 @@ export default function ProfilePage() {
 
   const handleWhatsAppSupport = () => {
     console.log("PROFILE_PAGE: handleWhatsAppSupport called. Current supportPhoneNumber state:", supportPhoneNumber);
-    if (!supportPhoneNumber || supportPhoneNumber === FALLBACK_SUPPORT_PHONE && supportPhoneNumber !== "962796703099" && supportPhoneNumber !== "+962796703099" ) {
-       // Fallback logic
-    }
     if (!supportPhoneNumber) {
         toast({ title: "خطأ", description: "رقم هاتف الدعم غير متوفر حاليًا.", variant: "destructive" });
         return;
@@ -211,11 +208,12 @@ export default function ProfilePage() {
       numberToUse = numberToUse.substring(1);
     }
 
+    // Specific check for Jordanian numbers if they often start with 07... and need 962 prefix
     if (numberToUse.startsWith("07") && numberToUse.length === 10) { 
        numberToUse = "962" + numberToUse.substring(1);
     }
 
-    if (!/^\d+$/.test(numberToUse)) {
+    if (!/^\d+$/.test(numberToUse)) { // Ensure only digits remain after formatting
         console.error("PROFILE_PAGE: Invalid characters in support phone number after formatting:", numberToUse);
         toast({ title: "خطأ", description: "رقم هاتف الدعم غير صالح.", variant: "destructive" });
         return;
@@ -310,14 +308,15 @@ export default function ProfilePage() {
           <Button
             onClick={handleWhatsAppSupport}
             className="w-full p-3 text-base bg-[#25D366] text-white hover:bg-[#1DAE54] focus:bg-[#1DAE54] focus:ring-[#25D366]"
-            aria-label="تواصل مع الدعم عبر واتساب"
+            aria-label="تواصل مع الدعم"
             disabled={isLoading}
           >
             <MessageCircle className="ms-2 h-5 w-5" />
-            تواصل مع الدعم عبر واتساب
+            <strong>تواصل مع الدعم</strong>
           </Button>
         </CardFooter>
       </Card>
     </PageWrapper>
   );
 }
+
