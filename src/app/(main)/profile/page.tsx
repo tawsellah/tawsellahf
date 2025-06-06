@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { Loader2, User, Phone, Save, MessageSquare, ExternalLink, AlertCircle } from 'lucide-react';
+import { Loader2, User, Phone, Save, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 
@@ -36,7 +36,6 @@ export default function ProfilePage() {
   const { toast } = useToast();
   const [currentUserAuth, setCurrentUserAuth] = useState<FirebaseUserAuth | null>(null);
   const [userData, setUserData] = useState<UserProfileData | null>(null);
-  const [supportPhoneNumber, setSupportPhoneNumber] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -47,65 +46,6 @@ export default function ProfilePage() {
       phoneNumber: "",
     },
   });
-
-  const fetchSupportPhoneNumber = useCallback(async () => {
-    console.log("PROFILE_PAGE: Attempting to fetch support phone number...");
-    try {
-      const supportNumRef = ref(dbRider, 'support/contactPhoneNumber');
-      const snapshot = await get(supportNumRef);
-      console.log("PROFILE_PAGE: Snapshot for support/contactPhoneNumber exists:", snapshot.exists());
-
-      if (snapshot.exists()) {
-        const val = snapshot.val();
-        console.log("PROFILE_PAGE: RAW Value from DB (support/contactPhoneNumber):", JSON.stringify(val));
-        console.log("PROFILE_PAGE: Type of RAW Value from DB:", typeof val);
-
-        let phoneNumberToUse: string | null = null;
-
-        if (typeof val === 'string' && val.trim() !== '') {
-          console.log("PROFILE_PAGE: SUCCESS: Fetched and using support number from DB as direct string:", val);
-          phoneNumberToUse = val;
-        } else if (typeof val === 'object' && val !== null) {
-          console.log("PROFILE_PAGE: Value is an object. Attempting to extract first key as phone number.");
-          const keys = Object.keys(val);
-          if (keys.length > 0) {
-            const firstKey = keys[0];
-            if (firstKey && (firstKey.startsWith('+') || /^\d+$/.test(firstKey.replace(/\s/g, '')))) {
-              console.log("PROFILE_PAGE: SUCCESS: Extracted phone number from object key:", firstKey);
-              phoneNumberToUse = firstKey;
-            } else {
-              console.warn(`PROFILE_PAGE: Extracted key "${firstKey}" from object does not look like a valid phone number. Using fallback.`);
-            }
-          } else {
-            console.warn("PROFILE_PAGE: Value is an empty object. Using fallback.");
-          }
-        } else {
-           if (typeof val !== 'string' && val !== null) { // Check if not string and not null explicitly
-            console.warn(`PROFILE_PAGE: FALLBACK_USED: Support phone number was found, but its type is NOT 'string' or a recognized 'object'. Actual type: '${typeof val}'. Actual value from DB: ${JSON.stringify(val)}. Expected a direct string value or an object with the phone number as a key. Please check Firebase data structure for 'support/contactPhoneNumber'.`);
-          } else if (val === null) {
-             console.warn(`PROFILE_PAGE: FALLBACK_USED: Support phone number node 'support/contactPhoneNumber' exists but its value is NULL. Using default '0775580440'.`);
-          } else { // val is a string but it's empty or whitespace
-            console.warn(`PROFILE_PAGE: FALLBACK_USED: Support phone number from DB is an EMPTY string or just whitespace. Value: "${val}".`);
-          }
-        }
-
-        if (phoneNumberToUse) {
-          setSupportPhoneNumber(phoneNumberToUse);
-        } else {
-          console.warn("PROFILE_PAGE: FALLBACK_USED (after checks): Could not determine a valid phone number from DB. Using default '0775580440'.");
-          setSupportPhoneNumber("0775580440");
-        }
-
-      } else {
-        console.warn("PROFILE_PAGE: FALLBACK_USED: Node 'support/contactPhoneNumber' NOT FOUND in dbRider. Using default '0775580440'.");
-        setSupportPhoneNumber("0775580440");
-      }
-    } catch (error) {
-      console.error("PROFILE_PAGE: ERROR during fetch support phone number:", error);
-      toast({ title: "خطأ", description: "لم نتمكن من تحميل رقم هاتف الدعم. سيتم استخدام الرقم الافتراضي.", variant: "destructive" });
-      setSupportPhoneNumber("0775580440"); // Fallback on error
-    }
-  }, [toast]);
 
   const fetchUserData = useCallback(async (user: FirebaseUserAuth) => {
     try {
@@ -148,19 +88,18 @@ export default function ProfilePage() {
       setIsLoading(true); 
       if (user) {
         setCurrentUserAuth(user);
-        Promise.all([fetchUserData(user), fetchSupportPhoneNumber()]).then(() => {
+        fetchUserData(user).then(() => {
           setIsLoading(false);
         });
       } else {
         setCurrentUserAuth(null);
         setUserData(null);
-        setSupportPhoneNumber(null); 
         router.push('/auth/signin');
         setIsLoading(false);
       }
     });
     return () => unsubscribe();
-  }, [router, fetchUserData, fetchSupportPhoneNumber]);
+  }, [router, fetchUserData]);
 
   const onSubmit = async (data: ProfileFormData) => {
     if (!currentUserAuth) return;
@@ -206,28 +145,6 @@ export default function ProfilePage() {
       toast({ title: "خطأ في التحديث", description: error.message || "لم نتمكن من حفظ التغييرات.", variant: "destructive" });
     } finally {
       setIsSaving(false);
-    }
-  };
-
-  const handleWhatsAppSupport = () => {
-    console.log("PROFILE_PAGE: handleWhatsAppSupport called. Current supportPhoneNumber state:", supportPhoneNumber);
-    if (supportPhoneNumber && supportPhoneNumber.trim() !== "") {
-      let whatsappFormattedNumber = supportPhoneNumber.replace(/\s+/g, ''); 
-
-      if (whatsappFormattedNumber.startsWith('+')) { 
-        whatsappFormattedNumber = whatsappFormattedNumber.substring(1);
-      }
-      
-      if (whatsappFormattedNumber.startsWith('07')) { 
-        whatsappFormattedNumber = `962${whatsappFormattedNumber.substring(1)}`;
-      }
-      
-      console.log("PROFILE_PAGE: Opening WhatsApp with number for wa.me:", whatsappFormattedNumber);
-      window.open(`https://wa.me/${whatsappFormattedNumber}`, '_blank', 'noopener,noreferrer');
-    } else {
-      console.warn("PROFILE_PAGE: WhatsApp button clicked, but supportPhoneNumber is null, empty, or fallback. Using hardcoded fallback for wa.me: 962775580440");
-      toast({ title: "رقم الدعم غير متوفر", description: "عذراً، رقم هاتف الدعم غير متاح حالياً. الرجاء المحاولة لاحقاً أو الاتصال بالرقم الافتراضي.", variant: "default" });
-      window.open(`https://wa.me/962775580440`, '_blank', 'noopener,noreferrer');
     }
   };
 
@@ -311,20 +228,9 @@ export default function ProfilePage() {
           </Form>
         </CardContent>
         <CardFooter className="flex flex-col gap-4 pt-6 border-t">
-           <Button
-            onClick={handleWhatsAppSupport}
-            disabled={isSaving} 
-            className="w-full p-3 text-base bg-[#25D366] text-white hover:bg-[#1DAE54] focus:bg-[#1DAE54] focus:ring-[#25D366]"
-            aria-label="تواصل مع الدعم عبر واتساب"
-            >
-            <MessageSquare className="ms-2 h-5 w-5" />
-            تواصل مع الدعم عبر واتساب
-            {supportPhoneNumber && <ExternalLink className="me-2 h-4 w-4 opacity-70" />}
-          </Button>
+           {/* WhatsApp Support Button Removed */}
         </CardFooter>
       </Card>
     </PageWrapper>
   );
 }
-
-    
