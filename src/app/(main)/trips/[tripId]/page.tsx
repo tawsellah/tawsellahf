@@ -38,17 +38,8 @@ export default function TripDetailsPage() {
   const [actualClickCode, setActualClickCode] = useState<string>(CLICK_PAYMENT_CODE_PLACEHOLDER);
 
   const fetchTripDetails = useCallback(async () => {
-    if (!trip) { // Only show main loader if no data is present at all
-        setIsLoading(true);
-    }
-    setTrip(null);
-    setSelectedSeats([]);
-    setCurrentPaymentSelectionInDialog(null);
-    setIsCheckingTripStatus(false);
-
     if (!tripIdFromParams) {
         toast({ title: "خطأ", description: "معرّف الرحلة غير موجود.", variant: "destructive" });
-        setIsLoading(false);
         router.replace('/');
         return;
     }
@@ -108,19 +99,16 @@ export default function TripDetailsPage() {
               const stopsSnapshot = await get(stopsRefFirebase);
               if (stopsSnapshot.exists() && stopsSnapshot.val().stops && Array.isArray(stopsSnapshot.val().stops)) {
                 enrichedTrip.stops = stopsSnapshot.val().stops;
-              } else {
-                // console.log(`No stops found or 'stops' field missing/invalid for key: stopstations/${stopStationsPathKey}. Snapshot exists: ${stopsSnapshot.exists()}. Snapshot val:`, stopsSnapshot.val());
               }
             } catch (stopsError) {
               console.error(`Error fetching stop stations for key ${stopStationsPathKey}:`, stopsError);
             }
-          } else {
-            // console.log("fbTrip.startPoint or fbTrip.destination is missing, skipping stops fetch.");
           }
           setTrip(enrichedTrip);
 
         } else {
            toast({ title: "خطأ", description: "لم يتم العثور على بيانات السائق لهذه الرحلة.", variant: "destructive" });
+           setTrip(null);
            router.replace('/');
         }
       } else {
@@ -133,13 +121,13 @@ export default function TripDetailsPage() {
       toast({ title: "خطأ", description: "لا يمكن تحميل تفاصيل الرحلة.", variant: "destructive" });
       setTrip(null);
       router.replace('/');
-    } finally {
-      setIsLoading(false);
     }
-  }, [tripIdFromParams, router, toast, trip]);
+  }, [tripIdFromParams, router, toast]);
 
   useEffect(() => {
     if (tripIdFromParams) {
+      setIsLoading(true);
+      let hasCache = false;
       // Pre-fill state from session storage if available for instant UI response
       try {
         const cachedTripJSON = sessionStorage.getItem(`trip_${tripIdFromParams}`);
@@ -147,13 +135,18 @@ export default function TripDetailsPage() {
           const cachedTrip = JSON.parse(cachedTripJSON) as Trip;
           setTrip(cachedTrip);
           setActualClickCode(cachedTrip.driver.clickCode || CLICK_PAYMENT_CODE_PLACEHOLDER);
+          hasCache = true;
+          setIsLoading(false); // If we have cache, stop loading immediately for instant UI
         }
       } catch (e) {
         console.error("Could not get trip from session storage.", e);
       }
       
       // Always fetch fresh data to get the latest seat availability and trip status
-      fetchTripDetails();
+      fetchTripDetails().finally(() => {
+        // Ensure isLoading is false after fetch, especially if no cache was found
+        setIsLoading(false);
+      });
     }
   }, [tripIdFromParams, fetchTripDetails]);
 
@@ -556,7 +549,7 @@ export default function TripDetailsPage() {
   };
 
 
-  if (isLoading || !trip) {
+  if (isLoading) {
     return (
       <div className="flex flex-col justify-center items-center min-h-[calc(100vh-200px)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -565,7 +558,7 @@ export default function TripDetailsPage() {
     );
   }
 
-  if (!trip && !isLoading) {
+  if (!trip) {
     return (
       <div className="text-center py-10">
         <XCircle className="mx-auto h-12 w-12 text-destructive mb-4" />
@@ -746,3 +739,4 @@ export default function TripDetailsPage() {
 
 
     
+
