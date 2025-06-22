@@ -38,7 +38,9 @@ export default function TripDetailsPage() {
   const [actualClickCode, setActualClickCode] = useState<string>(CLICK_PAYMENT_CODE_PLACEHOLDER);
 
   const fetchTripDetails = useCallback(async () => {
-    setIsLoading(true);
+    if (!trip) { // Only show main loader if no data is present at all
+        setIsLoading(true);
+    }
     setTrip(null);
     setSelectedSeats([]);
     setCurrentPaymentSelectionInDialog(null);
@@ -134,10 +136,23 @@ export default function TripDetailsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [tripIdFromParams, router, toast]);
+  }, [tripIdFromParams, router, toast, trip]);
 
   useEffect(() => {
     if (tripIdFromParams) {
+      // Pre-fill state from session storage if available for instant UI response
+      try {
+        const cachedTripJSON = sessionStorage.getItem(`trip_${tripIdFromParams}`);
+        if (cachedTripJSON) {
+          const cachedTrip = JSON.parse(cachedTripJSON) as Trip;
+          setTrip(cachedTrip);
+          setActualClickCode(cachedTrip.driver.clickCode || CLICK_PAYMENT_CODE_PLACEHOLDER);
+        }
+      } catch (e) {
+        console.error("Could not get trip from session storage.", e);
+      }
+      
+      // Always fetch fresh data to get the latest seat availability and trip status
       fetchTripDetails();
     }
   }, [tripIdFromParams, fetchTripDetails]);
@@ -541,7 +556,7 @@ export default function TripDetailsPage() {
   };
 
 
-  if (isLoading) {
+  if (isLoading || !trip) {
     return (
       <div className="flex flex-col justify-center items-center min-h-[calc(100vh-200px)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -550,7 +565,7 @@ export default function TripDetailsPage() {
     );
   }
 
-  if (!trip) {
+  if (!trip && !isLoading) {
     return (
       <div className="text-center py-10">
         <XCircle className="mx-auto h-12 w-12 text-destructive mb-4" />
