@@ -11,7 +11,7 @@ export interface FirebaseTrip {
   notes?: string;
   offeredSeatIds?: string[];
   offeredSeatsConfig?: {
-    [seatId: string]: boolean | { userId: string; phone: string; fullName: string; bookedAt: number };
+    [seatId: string]: boolean | { userId: string; phone: string; fullName: string; bookedAt: number; paymentType?: 'cash' | 'cliq' };
   };
   pricePerPassenger: number;
   startPoint: string;
@@ -24,6 +24,7 @@ export interface FirebaseTrip {
       phone: string;
       fullName: string;
       bookedAt: number;
+      paymentType?: 'cash' | 'cliq';
     };
   };
 }
@@ -53,6 +54,7 @@ export interface FirebaseUser {
   vehiclePlateNumber?: string;
   vehicleType?: string;
   vehicleYear?: string;
+  walletBalance?: number;
 }
 
 export interface Trip {
@@ -84,6 +86,7 @@ export interface Trip {
   notes?: string;
   status: FirebaseTrip['status'];
   seats: Seat[];
+  stops?: string[];
 }
 
 export type SeatStatus = 'available' | 'selected' | 'taken' | 'driver';
@@ -95,7 +98,7 @@ export interface Seat {
   row: 'front' | 'rear' | 'driver';
   position: number;
   price?: number;
-  bookedBy?: { userId: string; phone: string; fullName?: string; bookedAt?: number };
+  bookedBy?: { userId: string; phone: string; fullName?: string; bookedAt?: number; paymentType?: 'cash' | 'cliq' };
 }
 
 export interface StoredHistoryTrip {
@@ -112,6 +115,9 @@ export interface StoredHistoryTrip {
   bookedAt: number;
   userId: string;
   status?: 'booked' | 'user-cancelled' | 'system-cancelled';
+  paymentType?: 'cash' | 'cliq';
+  fullNameSnapshot?: string;
+  phoneSnapshot?: string;
 }
 
 export interface DisplayableHistoryTrip extends StoredHistoryTrip {

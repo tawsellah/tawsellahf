@@ -34,7 +34,7 @@ export default function TripDetailsPage() {
   const [isCheckingTripStatus, setIsCheckingTripStatus] = useState(false);
 
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
-  const [currentPaymentSelectionInDialog, setCurrentPaymentSelectionInDialog] = useState<'cash' | 'click' | null>(null);
+  const [currentPaymentSelectionInDialog, setCurrentPaymentSelectionInDialog] = useState<'cash' | 'cliq' | null>(null);
   const [actualClickCode, setActualClickCode] = useState<string>(CLICK_PAYMENT_CODE_PLACEHOLDER);
 
   const fetchTripDetails = useCallback(async () => {
@@ -262,7 +262,8 @@ export default function TripDetailsPage() {
     currentTripId: string,
     userId: string,
     userPhoneNumber: string,
-    userFullName: string
+    userFullName: string,
+    paymentType: 'cash' | 'cliq'
   ): Promise<void> => {
     const tripRef = ref(dbPrimary, `currentTrips/${currentTripId}`);
     const bookedAtTimestamp = Date.now();
@@ -270,7 +271,8 @@ export default function TripDetailsPage() {
         userId, 
         phone: userPhoneNumber, 
         fullName: userFullName, 
-        bookedAt: bookedAtTimestamp 
+        bookedAt: bookedAtTimestamp,
+        paymentType: paymentType,
     };
 
     await runTransaction(tripRef, (currentFirebaseTripData: FirebaseTripType | null): FirebaseTripType | undefined => {
@@ -330,7 +332,7 @@ export default function TripDetailsPage() {
     userId: string,
     userPhoneNumber: string,
     userFullName: string,
-    paymentType: 'cash' | 'click'
+    paymentType: 'cash' | 'cliq'
   ) => {
     if (!trip) {
         console.error("CRITICAL_BOOKING_ABORT: Trip data is null in handleSuccessfulBookingFinalization. Cannot proceed.");
@@ -365,6 +367,7 @@ export default function TripDetailsPage() {
             bookedAt: Date.now(),
             userId: userId,
             status: 'booked',
+            paymentType: paymentType,
           };
           await firebaseSet(newBookingRef, historyTripData);
         }
@@ -375,7 +378,8 @@ export default function TripDetailsPage() {
         userId, 
         phone: userPhoneNumber, 
         fullName: userFullName, 
-        bookedAt: Date.now() 
+        bookedAt: Date.now(),
+        paymentType: paymentType,
     };
 
     setTrip(currentTripUiState => {
@@ -460,7 +464,7 @@ export default function TripDetailsPage() {
   };
 
 
-  const processBooking = async (paymentType: 'cash' | 'click') => {
+  const processBooking = async (paymentType: 'cash' | 'cliq') => {
     const currentUser = authRider.currentUser;
     const currentTripForBooking = trip; 
 
@@ -524,14 +528,14 @@ export default function TripDetailsPage() {
     }
 
     try {
-      await performSeatUpdateTransaction(currentTripId, userId, userPhoneNumber, userFullName);
+      await performSeatUpdateTransaction(currentTripId, userId, userPhoneNumber, userFullName, paymentType);
       await handleSuccessfulBookingFinalization(currentTripId, userId, userPhoneNumber, userFullName, paymentType);
     } catch (error: any) {
       if (error.message === "Trip data not found in transaction.") {
         console.warn(`HANDLED (Attempt 1 Failed - Not Found): Transaction failed for trip ${currentTripId}. User ${currentUser?.uid}, seats ${selectedSeats.join(', ')}. Error: ${error.message}. Retrying after delay...`);
         await new Promise(resolve => setTimeout(resolve, 1200)); 
         try {
-          await performSeatUpdateTransaction(currentTripId, userId, userPhoneNumber, userFullName);
+          await performSeatUpdateTransaction(currentTripId, userId, userPhoneNumber, userFullName, paymentType);
           await handleSuccessfulBookingFinalization(currentTripId, userId, userPhoneNumber, userFullName, paymentType);
         } catch (retryError: any) {
           console.error(`HANDLED (Retry Failed): Transaction failed for trip ${currentTripId} after retry. User ${currentUser?.uid}, seats ${selectedSeats.join(', ')}. Error:`, retryError);
@@ -646,7 +650,7 @@ export default function TripDetailsPage() {
           <div className="grid gap-4 py-4">
             <RadioGroup
               value={currentPaymentSelectionInDialog || undefined}
-              onValueChange={(value: 'cash' | 'click') => setCurrentPaymentSelectionInDialog(value)}
+              onValueChange={(value: 'cash' | 'cliq') => setCurrentPaymentSelectionInDialog(value)}
               className="space-y-3"
             >
               <Label htmlFor="r-cash" className={cn("flex items-center space-x-2 space-x-reverse p-3 border rounded-md hover:bg-accent/50 transition-colors cursor-pointer", currentPaymentSelectionInDialog === 'cash' ? "bg-seat-selected text-seat-selected-foreground border-seat-selected/70" : "border-border")}>
@@ -654,14 +658,14 @@ export default function TripDetailsPage() {
                 <DollarSign className="h-5 w-5 text-primary" />
                 <span className="flex-1 text-base">كاش</span>
               </Label>
-              <Label htmlFor="r-click" className={cn("flex items-center space-x-2 space-x-reverse p-3 border rounded-md hover:bg-accent/50 transition-colors cursor-pointer", currentPaymentSelectionInDialog === 'click' ? "bg-seat-selected text-seat-selected-foreground border-seat-selected/70" : "border-border")}>
-                <RadioGroupItem value="click" id="r-click" />
+              <Label htmlFor="r-cliq" className={cn("flex items-center space-x-2 space-x-reverse p-3 border rounded-md hover:bg-accent/50 transition-colors cursor-pointer", currentPaymentSelectionInDialog === 'cliq' ? "bg-seat-selected text-seat-selected-foreground border-seat-selected/70" : "border-border")}>
+                <RadioGroupItem value="cliq" id="r-cliq" />
                 <Smartphone className="h-5 w-5 text-primary" />
                 <span className="flex-1 text-base">كليك</span>
               </Label>
             </RadioGroup>
 
-            {currentPaymentSelectionInDialog === 'click' && (
+            {currentPaymentSelectionInDialog === 'cliq' && (
               <div className="mt-4 space-y-3 border-t pt-4">
                 <h4 className="text-center text-lg font-semibold text-primary">الدفع بواسطة كليك</h4>
                 <p className="text-center text-sm text-muted-foreground">يرجى استخدام الرمز التالي لإتمام عملية الدفع مع السائق:</p>
@@ -695,7 +699,7 @@ export default function TripDetailsPage() {
             </DialogClose>
             <Button
               onClick={handleDialogConfirmAndBook}
-              disabled={!currentPaymentSelectionInDialog || isBooking || (currentPaymentSelectionInDialog === 'click' && actualClickCode === CLICK_PAYMENT_CODE_PLACEHOLDER)}
+              disabled={!currentPaymentSelectionInDialog || isBooking || (currentPaymentSelectionInDialog === 'cliq' && actualClickCode === CLICK_PAYMENT_CODE_PLACEHOLDER)}
             >
               {isBooking && <Loader2 className="ms-2 h-5 w-5 animate-spin" />}
               {!currentPaymentSelectionInDialog ? "اختر طريقة أولاً" :
@@ -739,4 +743,5 @@ export default function TripDetailsPage() {
 
 
     
+
 
