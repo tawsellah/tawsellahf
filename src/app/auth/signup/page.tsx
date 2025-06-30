@@ -12,7 +12,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
 import { authRider, dbRider } from '@/lib/firebase'; // Use authRider and dbRider
-import { createUserWithEmailAndPassword } from 'firebase/auth'; // Removed FirebaseError
+import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { ref, set } from 'firebase/database';
 
 const signUpSchema = z.object({
@@ -63,32 +63,42 @@ export default function SignUpPage() {
         className: "bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-200 border-green-300 dark:border-green-600"
       });
       router.push('/auth/signin');
-    } catch (error: any) { // Changed error type to any
+    } catch (error) {
       console.error("Error signing up:", error);
       let errorMessage = "حدث خطأ أثناء إنشاء الحساب. الرجاء المحاولة مرة أخرى.";
-      if (error && typeof error === 'object' && 'code' in error) { // Check for error.code
-        switch (error.code) {
+      let hasSetFieldSpecificError = false;
+
+      // Type guard to check if the error is a Firebase error
+      if (error && typeof error === 'object' && 'code' in error) {
+        const firebaseError = error as { code: string; message: string };
+        switch (firebaseError.code) {
           case 'auth/email-already-in-use':
             errorMessage = "هذا البريد الإلكتروني (المشتق من رقم الهاتف) مستخدم بالفعل.";
             form.setError("phoneNumber", { message: "رقم الهاتف هذا مسجل بالفعل." });
+            hasSetFieldSpecificError = true;
             break;
           case 'auth/weak-password':
             errorMessage = "كلمة المرور ضعيفة جداً. يجب أن تكون 6 أحرف على الأقل.";
             form.setError("password", { message: errorMessage });
+            hasSetFieldSpecificError = true;
             break;
           case 'auth/invalid-email':
             errorMessage = "صيغة البريد الإلكتروني (المشتقة من رقم الهاتف) غير صالحة.";
             break;
           default:
-            errorMessage = `فشل إنشاء الحساب: ${error.message || 'خطأ غير معروف'}`;
+            errorMessage = `فشل إنشاء الحساب: ${firebaseError.message || 'خطأ غير معروف'}`;
         }
       }
+
       toast({
         title: "خطأ في إنشاء الحساب",
         description: errorMessage,
         variant: "destructive",
       });
-      form.setError("root", { message: errorMessage });
+      
+      if (!hasSetFieldSpecificError) {
+         form.setError("root", { message: errorMessage });
+      }
     }
   };
 

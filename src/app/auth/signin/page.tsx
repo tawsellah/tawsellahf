@@ -11,8 +11,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
-import { authRider } from '@/lib/firebase'; // Use authRider
-import { signInWithEmailAndPassword } from 'firebase/auth'; // Removed FirebaseError
+import { authRider } from '@/lib/firebase';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 
 const signInSchema = z.object({
   phoneNumber: z.string().regex(/^[0-9]{10}$/, "يجب أن يتكون رقم الهاتف من 10 أرقام (مثال: 05XXXXXXXX)"),
@@ -44,15 +44,20 @@ export default function SignInPage() {
         className: "bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-200 border-green-300 dark:border-green-600"
       });
       router.push('/'); // Navigate to main page on successful sign-in
-    } catch (error: any) { // Changed error type to any
+    } catch (error) {
       console.error("Error signing in:", error);
       let errorMessage = "فشل تسجيل الدخول. الرجاء التحقق من المعلومات والمحاولة مرة أخرى.";
-      if (error && typeof error === 'object' && 'code' in error) { // Check for error.code
-        switch (error.code) {
+      let setFormError = false;
+      
+      // Type guard to check if the error is a Firebase error
+      if (error && typeof error === 'object' && 'code' in error) {
+        const firebaseError = error as { code: string; message: string };
+        switch (firebaseError.code) {
           case 'auth/user-not-found':
           case 'auth/wrong-password':
-          case 'auth/invalid-credential': // Covers both wrong password and user not found in newer SDK versions
+          case 'auth/invalid-credential':
             errorMessage = "رقم الهاتف أو كلمة المرور غير صحيحة.";
+            setFormError = true;
             break;
           case 'auth/invalid-email':
             errorMessage = "صيغة البريد الإلكتروني (المشتقة من رقم الهاتف) غير صالحة. تأكد من إدخال رقم هاتف صحيح.";
@@ -61,15 +66,19 @@ export default function SignInPage() {
             errorMessage = "تم حظر الوصول مؤقتًا بسبب عدد كبير جدًا من محاولات تسجيل الدخول الفاشلة. يرجى المحاولة مرة أخرى لاحقًا.";
             break;
           default:
-            errorMessage = `فشل تسجيل الدخول: ${error.message || 'خطأ غير معروف'}`;
+            errorMessage = `فشل تسجيل الدخول: ${firebaseError.message || 'خطأ غير معروف'}`;
         }
       }
+
       toast({
         title: "خطأ في تسجيل الدخول",
         description: errorMessage,
         variant: "destructive",
       });
-      form.setError("root", { message: "رقم الهاتف أو كلمة المرور غير صحيحة."});
+
+      if (setFormError) {
+         form.setError("root", { message: "رقم الهاتف أو كلمة المرور غير صحيحة." });
+      }
     }
   };
 
