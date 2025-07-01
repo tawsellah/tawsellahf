@@ -123,24 +123,8 @@ export function Navbar() {
   
   const renderNavItems = (isMobile = false) => {
     if (currentUserAuth && userData) {
-      // Logged-in state
-      const dynamicNavLinks = [];
-      if (pathname === '/') {
-        if (pathname !== '/profile') dynamicNavLinks.push({ href: '/profile', label: 'ملفي الشخصي', icon: UserIcon, id: 'profile-dynamic1' });
-        dynamicNavLinks.push({ href: '/my-trips', label: 'رحلاتي', icon: History, id: 'my-trips-dynamic1' });
-      } else if (pathname === '/my-trips') {
-        if (pathname !== '/profile') dynamicNavLinks.push({ href: '/profile', label: 'ملفي الشخصي', icon: UserIcon, id: 'profile-dynamic2' });
-        dynamicNavLinks.push({ href: '/', label: 'ابحث عن رحلة', icon: Search, id: 'search-trip-dynamic' });
-      } else if (pathname === '/profile') {
-         dynamicNavLinks.push({ href: '/', label: 'ابحث عن رحلة', icon: Search, id: 'search-trip-dynamic-profile' });
-         dynamicNavLinks.push({ href: '/my-trips', label: 'رحلاتي', icon: History, id: 'my-trips-dynamic-profile' });
-      } else { // For other pages like /trips/[tripId]
-        if (pathname !== '/profile') dynamicNavLinks.push({ href: '/profile', label: 'ملفي الشخصي', icon: UserIcon, id: 'profile-dynamic3' });
-        dynamicNavLinks.push({ href: '/my-trips', label: 'رحلاتي', icon: History, id: 'my-trips-dynamic3' });
-         dynamicNavLinks.push({ href: '/', label: 'ابحث عن رحلة', icon: Search, id: 'search-trip-dynamic3' });
-      }
-
-
+      // Logged-in state: Navigation links have been removed as requested.
+      // The UI will now only show the user info and sign-out button.
       if (isMobile) {
         return (
           <>
@@ -165,9 +149,6 @@ export function Navbar() {
                 </div>
               </a>
             </Link>
-            {dynamicNavLinks.map((link) => (
-              <NavLinkItem key={link.id} {...link} isMobile={isMobile} id={link.id} />
-            ))}
             <div className="mt-auto p-4 border-t">
               <Button
                 variant="ghost"
@@ -187,9 +168,6 @@ export function Navbar() {
         // Desktop logged-in view
         return (
           <div className="flex items-center gap-4">
-            {dynamicNavLinks.map((link) => (
-              <NavLinkItem key={link.id} {...link} isMobile={isMobile} id={link.id} />
-            ))}
             <Link href="/profile" passHref legacyBehavior>
               <a className="flex items-center gap-2 cursor-pointer hover:bg-accent/50 p-2 rounded-md transition-colors"
                  onClick={() => router.push('/profile')}
@@ -267,5 +245,3 @@ export function Navbar() {
     </header>
   );
 }
-
-    
