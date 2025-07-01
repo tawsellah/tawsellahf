@@ -41,7 +41,7 @@ const groupStatusIcons: Record<GroupedDisplayableTrip['cardHeaderStatusDisplay']
 export function HistoryTripCard({ tripGroup, onInitiateCancel, isProcessingCancellation }: HistoryTripCardProps) {
   const StatusIcon = groupStatusIcons[tripGroup.cardHeaderStatusDisplay] || AlertTriangle;
   const bookedSeatsNames = tripGroup.userBookingsForThisTrip
-    .map(b => `${b.seatName}${b.status === 'user-cancelled' ? ' (ملغى)' : b.status === 'system-cancelled' ? ' (ملغى نظاماً)' : ''}`)
+    .map(b => b.seatName)
     .join('، ');
   const totalActivePrice = tripGroup.userBookingsForThisTrip
     .filter(b => b.status !== 'user-cancelled' && b.status !== 'system-cancelled')
@@ -76,12 +76,10 @@ export function HistoryTripCard({ tripGroup, onInitiateCancel, isProcessingCance
         </div>
       </CardHeader>
       <CardContent className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 text-sm">
-        {tripGroup.cardHeaderStatusDisplay !== 'مكتملة' && (
-          <div className="flex items-center gap-2 col-span-full">
-            <Users className="h-4 w-4 text-primary" />
-            <span>المقاعد: {bookedSeatsNames}</span>
-          </div>
-        )}
+        <div className="flex items-center gap-2 col-span-full">
+          <Users className="h-4 w-4 text-primary" />
+          <span>المقاعد: {bookedSeatsNames}</span>
+        </div>
         <div className="flex items-center gap-2">
           <DollarSign className="h-4 w-4 text-primary" />
           <span>السعر الإجمالي (نشط): {totalActivePrice.toLocaleString('ar-JO')} دينار</span>
