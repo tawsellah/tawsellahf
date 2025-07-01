@@ -233,20 +233,30 @@ export default function MyTripsPage() {
 
   const handleInitiateCancellation = (tripGroup: GroupedDisplayableTrip) => {
     if (!currentUserAuth) return;
-
-    const activeBookingsForThisOriginalTrip = tripGroup.userBookingsForThisTrip.filter(
-      b => b.status !== 'user-cancelled' && b.status !== 'system-cancelled' && b.originalActualTripStatus === 'upcoming'
+  
+    const CANCELLATION_WINDOW_MS = 15 * 60 * 1000;
+    const now = Date.now();
+  
+    // Filter for bookings that are active, for an upcoming trip, AND within the 15-minute window
+    const cancellableBookings = tripGroup.userBookingsForThisTrip.filter(
+      b => b.status === 'booked' && 
+           b.originalActualTripStatus === 'upcoming' &&
+           (now - b.bookedAt) < CANCELLATION_WINDOW_MS
     );
     
-    setBookingsForCurrentCancellationScope(activeBookingsForThisOriginalTrip);
-
-    if (activeBookingsForThisOriginalTrip.length === 0) {
-        toast({title: "لا يمكن الإلغاء", description: "لا توجد حجوزات نشطة لهذه الرحلة أو أن الرحلة لم تعد قادمة.", variant: "default"});
+    setBookingsForCurrentCancellationScope(cancellableBookings);
+  
+    if (cancellableBookings.length === 0) {
+        toast({
+            title: "لا يمكن الإلغاء", 
+            description: "لا توجد حجوزات يمكن إلغاؤها. قد تكون الرحلة غير قادمة أو قد مر أكثر من 15 دقيقة على حجزك.", 
+            variant: "default"
+        });
         return;
     }
     
-    if (activeBookingsForThisOriginalTrip.length === 1) {
-      setSingleBookingToCancel(activeBookingsForThisOriginalTrip[0]);
+    if (cancellableBookings.length === 1) {
+      setSingleBookingToCancel(cancellableBookings[0]);
       setShowCancelSingleConfirmDialog(true);
     } else {
       setSelectedBookingIdsInDialog([]); 
@@ -442,15 +452,13 @@ export default function MyTripsPage() {
                                         checked ? [...prev, booking.bookingId] : prev.filter(id => id !== booking.bookingId)
                                     );
                                 }}
-                                disabled={booking.status === 'user-cancelled' || booking.status === 'system-cancelled' || booking.currentTripStatusDisplay !== 'قادمة'}
+                                // All bookings in this list are cancellable, so no need to disable
                             />
-                            <Label htmlFor={`cancel-${booking.bookingId}`} className={`flex-1 cursor-pointer ${ (booking.status === 'user-cancelled' || booking.status === 'system-cancelled' || booking.currentTripStatusDisplay !== 'قادمة') ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                            <Label htmlFor={`cancel-${booking.bookingId}`} className="flex-1 cursor-pointer">
                                 <span className="font-medium">{booking.seatName}</span>
                                 <span className="text-xs text-muted-foreground block">
-                                    (رحلة من {booking.departureCityDisplay} إلى {booking.arrivalCityDisplay} في {booking.tripDateDisplay}) - {booking.currentTripStatusDisplay}
+                                    (رحلة من {booking.departureCityDisplay} إلى {booking.arrivalCityDisplay} في {booking.tripDateDisplay})
                                 </span>
-                                {(booking.status === 'user-cancelled' || booking.status === 'system-cancelled' || booking.currentTripStatusDisplay !== 'قادمة') && 
-                                  <span className="text-xs text-destructive block">لا يمكن إلغاء هذا المقعد</span>}
                             </Label>
                         </div>
                     ))}

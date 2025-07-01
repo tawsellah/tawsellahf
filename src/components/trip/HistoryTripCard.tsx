@@ -3,10 +3,11 @@
 
 import type { DisplayableHistoryTrip, GroupedDisplayableTrip } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'; 
-import { CalendarDays, Clock, DollarSign, MapPin, ChevronLeft, Car, User, CheckCircle, XCircle, AlertTriangle, RefreshCwIcon, Ban, Users, Info } from 'lucide-react'; // Added Info
+import { CalendarDays, Clock, DollarSign, MapPin, ChevronLeft, Car, User, CheckCircle, XCircle, AlertTriangle, RefreshCwIcon, Ban, Users, Info } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface HistoryTripCardProps {
   tripGroup: GroupedDisplayableTrip;
@@ -46,10 +47,17 @@ export function HistoryTripCard({ tripGroup, onInitiateCancel, isProcessingCance
     .filter(b => b.status !== 'user-cancelled' && b.status !== 'system-cancelled')
     .reduce((sum, b) => sum + b.tripPrice, 0);
 
-  // Determine if the cancel button should be enabled
-  // It should be enabled if the original trip is 'upcoming' AND there's at least one booking
-  // by the user for this trip that is currently 'booked' (not user-cancelled or system-cancelled).
-  const canCancel = tripGroup.canCancelAnyBookingInGroup;
+  const CANCELLATION_WINDOW_MS = 15 * 60 * 1000;
+
+  // This check determines if the "Cancel" button and footer should appear at all.
+  // It's true if the trip is upcoming and has at least one 'booked' seat.
+  const canPotentiallyCancel = tripGroup.canCancelAnyBookingInGroup;
+
+  // This check determines if the button is actually enabled.
+  // It's true if there's at least one 'booked' seat within the 15-min window.
+  const hasCancellableBookingInTimeWindow = canPotentiallyCancel && tripGroup.userBookingsForThisTrip.some(
+      booking => booking.status === 'booked' && (Date.now() - booking.bookedAt) < CANCELLATION_WINDOW_MS
+  );
 
   return (
     <Card className="overflow-hidden shadow-lg transition-all duration-300 ease-in-out hover:shadow-xl">
@@ -66,15 +74,14 @@ export function HistoryTripCard({ tripGroup, onInitiateCancel, isProcessingCance
             {tripGroup.cardHeaderStatusDisplay}
           </Badge>
         </div>
-        <div className="text-xs text-muted-foreground mt-1">
-           رقم الرحلة الأصلي: {tripGroup.originalTripId}
-        </div>
       </CardHeader>
       <CardContent className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 text-sm">
-        <div className="flex items-center gap-2 col-span-full">
-          <Users className="h-4 w-4 text-primary" />
-          <span>المقاعد: {bookedSeatsNames}</span>
-        </div>
+        {tripGroup.cardHeaderStatusDisplay !== 'مكتملة' && (
+          <div className="flex items-center gap-2 col-span-full">
+            <Users className="h-4 w-4 text-primary" />
+            <span>المقاعد: {bookedSeatsNames}</span>
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <DollarSign className="h-4 w-4 text-primary" />
           <span>السعر الإجمالي (نشط): {totalActivePrice.toLocaleString('ar-JO')} دينار</span>
@@ -92,20 +99,33 @@ export function HistoryTripCard({ tripGroup, onInitiateCancel, isProcessingCance
           <span>السائق: {tripGroup.driverNameSnapshot}</span>
         </div>
       </CardContent>
-      {canCancel && (
+      {canPotentiallyCancel && (
         <CardFooter className="p-4 flex items-center justify-end bg-muted/50">
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => onInitiateCancel(tripGroup)}
-            disabled={isProcessingCancellation}
-          >
-            <XCircle className="ms-2 h-4 w-4" />
-            إلغاء الحجز
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                {/* This div wrapper is necessary for the tooltip to work on a disabled button */}
+                <div className="inline-block">
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => onInitiateCancel(tripGroup)}
+                    disabled={isProcessingCancellation || !hasCancellableBookingInTimeWindow}
+                  >
+                    <XCircle className="ms-2 h-4 w-4" />
+                    إلغاء الحجز
+                  </Button>
+                </div>
+              </TooltipTrigger>
+              {!hasCancellableBookingInTimeWindow && (
+                <TooltipContent>
+                  <p>لا يمكن الإلغاء بعد مرور 15 دقيقة على الحجز.</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
         </CardFooter>
       )}
     </Card>
   );
 }
-
