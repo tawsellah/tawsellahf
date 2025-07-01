@@ -113,10 +113,18 @@ export default function SignInPage() {
             name="password"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="flex items-center gap-2">
-                  <Lock className="h-5 w-5 text-primary" />
-                  كلمة المرور
-                </FormLabel>
+                 <div className="flex items-center justify-between">
+                    <FormLabel className="flex items-center gap-2">
+                      <Lock className="h-5 w-5 text-primary" />
+                      كلمة المرور
+                    </FormLabel>
+                    <Link
+                      href="#"
+                      className="text-sm font-medium text-primary hover:underline"
+                    >
+                      نسيت كلمة السر؟
+                    </Link>
+                 </div>
                 <FormControl>
                   <Input type="password" placeholder="********" {...field} />
                 </FormControl>
