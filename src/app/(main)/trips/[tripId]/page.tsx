@@ -12,7 +12,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogC
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { CheckCircle, XCircle, Info, Armchair, Check, ArrowLeft, Loader2, DollarSign, Smartphone, Copy, MapPin, LogIn, CircleHelp, Route as RouteIcon } from 'lucide-react';
+import { CheckCircle, XCircle, Info, Armchair, Check, ArrowLeft, Loader2, DollarSign, Smartphone, Copy, MapPin, LogIn, CircleHelp, Route as RouteIcon, Users, Edit } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { dbPrimary, authRider, dbRider } from '@/lib/firebase';
 import { ref, get, runTransaction, push, set as firebaseSet, child, update, serverTimestamp } from 'firebase/database';
@@ -29,6 +30,9 @@ export default function TripDetailsPage() {
 
   const [trip, setTrip] = useState<Trip | null>(null);
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
+  const [selectedStop, setSelectedStop] = useState<string>('destination');
+  const [showOtherStopAlert, setShowOtherStopAlert] = useState(false);
+
   const [isLoading, setIsLoading] = useState(true);
   const [isBooking, setIsBooking] = useState(false);
   const [isCheckingTripStatus, setIsCheckingTripStatus] = useState(false);
@@ -49,14 +53,13 @@ export default function TripDetailsPage() {
 
       if (tripSnapshot.exists()) {
         const fbTrip = tripSnapshot.val() as FirebaseTripType;
-
         const driverSnapshot = await get(ref(dbPrimary, `users/${fbTrip.driverId}`));
 
         if (driverSnapshot.exists()) {
           const driverData = driverSnapshot.val() as FirebaseUser;
           const processedSeats = generateSeatsFromTripData(fbTrip);
 
-          const enrichedTrip: Trip = {
+          let enrichedTrip: Trip = {
             id: fbTrip.id,
             firebaseTripData: fbTrip,
             driver: {
@@ -85,7 +88,7 @@ export default function TripDetailsPage() {
             notes: fbTrip.notes,
             status: fbTrip.status,
             seats: processedSeats,
-            stops: [], 
+            stops: [],
           };
           setActualClickCode(enrichedTrip.driver.clickCode || CLICK_PAYMENT_CODE_PLACEHOLDER);
 
@@ -105,7 +108,6 @@ export default function TripDetailsPage() {
             }
           }
           setTrip(enrichedTrip);
-
         } else {
            toast({ title: "خطأ", description: "لم يتم العثور على بيانات السائق لهذه الرحلة.", variant: "destructive" });
            setTrip(null);
@@ -128,7 +130,6 @@ export default function TripDetailsPage() {
     if (tripIdFromParams) {
       setIsLoading(true);
       let hasCache = false;
-      // Pre-fill state from session storage if available for instant UI response
       try {
         const cachedTripJSON = sessionStorage.getItem(`trip_${tripIdFromParams}`);
         if (cachedTripJSON) {
@@ -136,15 +137,13 @@ export default function TripDetailsPage() {
           setTrip(cachedTrip);
           setActualClickCode(cachedTrip.driver.clickCode || CLICK_PAYMENT_CODE_PLACEHOLDER);
           hasCache = true;
-          setIsLoading(false); // If we have cache, stop loading immediately for instant UI
+          setIsLoading(false);
         }
       } catch (e) {
         console.error("Could not get trip from session storage.", e);
       }
       
-      // Always fetch fresh data to get the latest seat availability and trip status
       fetchTripDetails().finally(() => {
-        // Ensure isLoading is false after fetch, especially if no cache was found
         setIsLoading(false);
       });
     }
@@ -263,7 +262,8 @@ export default function TripDetailsPage() {
     userId: string,
     userPhoneNumber: string,
     userFullName: string,
-    paymentType: 'cash' | 'cliq'
+    paymentType: 'cash' | 'cliq',
+    stopPoint: string
   ): Promise<void> => {
     const tripRef = ref(dbPrimary, `currentTrips/${currentTripId}`);
     const bookedAtTimestamp = Date.now();
@@ -273,6 +273,7 @@ export default function TripDetailsPage() {
         fullName: userFullName, 
         bookedAt: bookedAtTimestamp,
         paymentType: paymentType,
+        selectedStop: stopPoint,
     };
 
     await runTransaction(tripRef, (currentFirebaseTripData: FirebaseTripType | null): FirebaseTripType | undefined => {
@@ -332,7 +333,8 @@ export default function TripDetailsPage() {
     userId: string,
     userPhoneNumber: string,
     userFullName: string,
-    paymentType: 'cash' | 'cliq'
+    paymentType: 'cash' | 'cliq',
+    stopPoint: string
   ) => {
     if (!trip) {
         console.error("CRITICAL_BOOKING_ABORT: Trip data is null in handleSuccessfulBookingFinalization. Cannot proceed.");
@@ -362,12 +364,11 @@ export default function TripDetailsPage() {
             arrivalCityValue: trip.firebaseTripData.destination,
             driverId: trip.driver.id,
             driverNameSnapshot: trip.driver.name,
-            fullNameSnapshot: userFullName,
-            phoneSnapshot: userPhoneNumber,
             bookedAt: Date.now(),
             userId: userId,
             status: 'booked',
             paymentType: paymentType,
+            selectedStop: stopPoint,
           };
           await firebaseSet(newBookingRef, historyTripData);
         }
@@ -380,6 +381,7 @@ export default function TripDetailsPage() {
         fullName: userFullName, 
         bookedAt: Date.now(),
         paymentType: paymentType,
+        selectedStop: stopPoint,
     };
 
     setTrip(currentTripUiState => {
@@ -413,9 +415,8 @@ export default function TripDetailsPage() {
     setSelectedSeats([]); 
     setCurrentPaymentSelectionInDialog(null);
 
-    // Commission Deduction Logic - REPLACED WITH GET-THEN-UPDATE
     const driverIdForCommission = trip.driver.id;
-    const commissionAmount = 0.20 * bookedSeatsCount; // Commission per seat
+    const commissionAmount = 0.20 * bookedSeatsCount;
     
     if (!driverIdForCommission) {
         console.error("CRITICAL_COMMISSION_ABORT: driverIdForCommission is undefined or null. Commission cannot be deducted.", trip.driver);
@@ -423,7 +424,6 @@ export default function TripDetailsPage() {
         const driverRefForUpdate = ref(dbPrimary, `users/${driverIdForCommission}`);
         console.log(`COMMISSION_DEDUCTION_GET_UPDATE: Attempting for driver: ${driverIdForCommission} (path: ${driverRefForUpdate.toString()}) for booking of ${bookedSeatsCount} seat(s).`);
         
-        // Optional: Keep the delay if you think it helps with eventual consistency before this read
         console.log(`COMMISSION_DEDUCTION_DELAY: Adding a 1.5s delay before driver wallet update for ${driverIdForCommission}. Current time: ${new Date().toISOString()}`);
         await new Promise(resolve => setTimeout(resolve, 1500)); 
         console.log(`COMMISSION_DEDUCTION_DELAY: Delay finished for ${driverIdForCommission}. Proceeding with get-then-update. Current time: ${new Date().toISOString()}`);
@@ -434,7 +434,7 @@ export default function TripDetailsPage() {
             if (!driverSnapshot.exists()) {
                 console.warn(`COMMISSION_DEDUCTION_GET_UPDATE_NOT_FOUND: Driver data NOT FOUND for ID ${driverIdForCommission} at path ${driverRefForUpdate.toString()}. Commission cannot be deducted.`);
             } else {
-                const driverData = driverSnapshot.val() as FirebaseUser; // Assuming FirebaseUser type has walletBalance
+                const driverData = driverSnapshot.val() as FirebaseUser;
                  if (typeof driverData !== 'object' || driverData === null) {
                     console.warn(`COMMISSION_DEDUCTION_GET_UPDATE_INVALID_DATA: Driver data for ID ${driverIdForCommission} is not a valid object. Data: ${JSON.stringify(driverData)}. Commission cannot be deducted.`);
                 } else {
@@ -445,7 +445,7 @@ export default function TripDetailsPage() {
                     updates[`users/${driverIdForCommission}/walletBalance`] = newBalance;
                     updates[`users/${driverIdForCommission}/updatedAt`] = serverTimestamp();
                     
-                    await update(ref(dbPrimary), updates); // Use ref(dbPrimary) for root reference with absolute paths
+                    await update(ref(dbPrimary), updates);
                     console.log(`COMMISSION_DEDUCTION_GET_UPDATE_SUCCESS: Successfully updated wallet for driver ${driverIdForCommission}. New balance should be ${newBalance}.`);
                 }
             }
@@ -460,7 +460,7 @@ export default function TripDetailsPage() {
       description: `تم حجز ${bookedSeatsCount} ${bookedSeatsCount === 1 ? 'مقعد' : bookedSeatsCount === 2 ? 'مقعدين' : 'مقاعد'} بطريقة الدفع: ${paymentType === 'cash' ? 'كاش' : 'كليك'}. نتمنى لك رحلة سعيدة!`,
       className: "bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-200 border-green-300 dark:border-green-600"
     });
-    router.push('/');
+    router.push('/my-trips');
   };
 
 
@@ -486,6 +486,7 @@ export default function TripDetailsPage() {
     const userId = currentUser.uid;
     let userPhoneNumber = '';
     let userFullName = '';
+    const stopPoint = selectedStop; // Use the state variable
 
     try {
         const userRef = ref(dbRider, `users/${userId}`);
@@ -528,15 +529,15 @@ export default function TripDetailsPage() {
     }
 
     try {
-      await performSeatUpdateTransaction(currentTripId, userId, userPhoneNumber, userFullName, paymentType);
-      await handleSuccessfulBookingFinalization(currentTripId, userId, userPhoneNumber, userFullName, paymentType);
+      await performSeatUpdateTransaction(currentTripId, userId, userPhoneNumber, userFullName, paymentType, stopPoint);
+      await handleSuccessfulBookingFinalization(currentTripId, userId, userPhoneNumber, userFullName, paymentType, stopPoint);
     } catch (error: any) {
       if (error.message === "Trip data not found in transaction.") {
         console.warn(`HANDLED (Attempt 1 Failed - Not Found): Transaction failed for trip ${currentTripId}. User ${currentUser?.uid}, seats ${selectedSeats.join(', ')}. Error: ${error.message}. Retrying after delay...`);
         await new Promise(resolve => setTimeout(resolve, 1200)); 
         try {
-          await performSeatUpdateTransaction(currentTripId, userId, userPhoneNumber, userFullName, paymentType);
-          await handleSuccessfulBookingFinalization(currentTripId, userId, userPhoneNumber, userFullName, paymentType);
+          await performSeatUpdateTransaction(currentTripId, userId, userPhoneNumber, userFullName, paymentType, stopPoint);
+          await handleSuccessfulBookingFinalization(currentTripId, userId, userPhoneNumber, userFullName, paymentType, stopPoint);
         } catch (retryError: any) {
           console.error(`HANDLED (Retry Failed): Transaction failed for trip ${currentTripId} after retry. User ${currentUser?.uid}, seats ${selectedSeats.join(', ')}. Error:`, retryError);
           toast({ title: "خطأ في الحجز", description: `لم نتمكن من إكمال الحجز للرحلة (${currentTripId}). قد تكون الرحلة قد حذفت أو لم تعد متوفرة.`, variant: "destructive"});
@@ -549,6 +550,15 @@ export default function TripDetailsPage() {
       }
     } finally {
       setIsBooking(false);
+    }
+  };
+
+  const handleStopChange = (value: string) => {
+    setSelectedStop(value);
+    if (value === 'other') {
+      setShowOtherStopAlert(true);
+    } else {
+      setShowOtherStopAlert(false);
     }
   };
 
@@ -595,20 +605,47 @@ export default function TripDetailsPage() {
         </Alert>
       )}
 
-      {trip.stops && trip.stops.length > 0 && (
+      {(trip.stops && trip.stops.length > 0) && (
         <Card className="mt-6">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xl font-semibold flex items-center gap-2">
               <RouteIcon className="h-6 w-6 text-primary" />
-              محطات التوقف
+              محطات التوقف ونقطة النزول
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <ul className="list-disc ps-5 space-y-1 text-sm text-muted-foreground">
-              {trip.stops.map((stop, index) => (
-                <li key={index}>{stop}</li>
-              ))}
-            </ul>
+          <CardContent className="pt-4 space-y-4">
+              <div>
+                  <h4 className="font-medium mb-2">نقاط التوقف المتاحة:</h4>
+                  <ul className="list-disc ps-5 space-y-1 text-sm text-muted-foreground">
+                    {trip.stops.map((stop, index) => (
+                      <li key={index}>{stop}</li>
+                    ))}
+                  </ul>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="stop-select" className="font-medium">اختر نقطة النزول (اختياري):</Label>
+                <Select value={selectedStop} onValueChange={handleStopChange}>
+                    <SelectTrigger id="stop-select" className="w-full">
+                        <SelectValue placeholder="اختر نقطة نزولك" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="destination">الوجهة النهائية ({trip.endPoint})</SelectItem>
+                        {trip.stops.map((stop, index) => (
+                            <SelectItem key={index} value={stop}>{stop}</SelectItem>
+                        ))}
+                        <SelectItem value="other">أخرى (سيتم التواصل معك)</SelectItem>
+                    </SelectContent>
+                </Select>
+              </div>
+              {showOtherStopAlert && (
+                  <Alert variant="default" className="bg-yellow-50 border-yellow-300 text-yellow-800 dark:bg-yellow-900/50 dark:border-yellow-700 dark:text-yellow-300">
+                      <CircleHelp className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+                      <AlertTitle className="font-semibold">تنويه</AlertTitle>
+                      <AlertDescription>
+                          لقد اخترت "أخرى". سيقوم السائق بالتواصل معك لتأكيد نقطة النزول النهائية.
+                      </AlertDescription>
+                  </Alert>
+              )}
           </CardContent>
         </Card>
       )}
@@ -704,7 +741,7 @@ export default function TripDetailsPage() {
               {isBooking && <Loader2 className="ms-2 h-5 w-5 animate-spin" />}
               {!currentPaymentSelectionInDialog ? "اختر طريقة أولاً" :
                currentPaymentSelectionInDialog === 'cash' ? "تأكيد والدفع كاش" :
-               (actualClickCode !== CLICK_PAYMENT_CODE_PLACEHOLDER ? "لقد دفعت، إتمام الحجز" : "رمز كليك للسائق غير متوفر")}
+               (actualClickCode !== CLICK_PAYMENT_CODE_PLACEHOLDER ? "اتمام الحجز" : "رمز كليك للسائق غير متوفر")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -736,12 +773,3 @@ export default function TripDetailsPage() {
     </div>
   );
 }
-    
-
-    
-
-
-
-    
-
-
