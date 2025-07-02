@@ -3,13 +3,13 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Menu, X, LogIn, UserPlus, Route, LogOut, Phone, History, Search, User as UserIcon } from 'lucide-react';
+import { Menu, X, LogIn, UserPlus, Route, Phone } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
 import { authRider, dbRider } from '@/lib/firebase';
-import { onAuthStateChanged, signOut, type User as FirebaseUserAuth } from 'firebase/auth';
+import { onAuthStateChanged, type User as FirebaseUserAuth } from 'firebase/auth';
 import { ref, get } from 'firebase/database';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import type { FirebaseUser } from '@/types'; 
@@ -70,15 +70,6 @@ export function Navbar() {
     return () => unsubscribe();
   }, []);
 
-  const handleSignOut = async () => {
-    try {
-      await signOut(authRider);
-      setIsMobileMenuOpen(false);
-      router.push('/'); 
-    } catch (error) {
-      console.error("Error signing out:", error);
-    }
-  };
   
   const NavLinkItem = ({ href, label, icon: Icon, isMobile, id, onClickOverride }: {href: string, label: string, icon: React.ElementType, isMobile?: boolean, id: string, onClickOverride?: () => void}) => (
     <Link href={href} passHref legacyBehavior>
@@ -123,8 +114,6 @@ export function Navbar() {
   
   const renderNavItems = (isMobile = false) => {
     if (currentUserAuth && userData) {
-      // Logged-in state: Navigation links have been removed as requested.
-      // The UI will now only show the user info and sign-out button.
       if (isMobile) {
         return (
           <>
@@ -149,19 +138,6 @@ export function Navbar() {
                 </div>
               </a>
             </Link>
-            <div className="mt-auto p-4 border-t">
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  handleSignOut();
-                  if (isMobileMenuOpen) setIsMobileMenuOpen(false);
-                }}
-                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-destructive-foreground bg-destructive hover:bg-destructive/90 justify-center"
-              >
-                <LogOut className="h-5 w-5" />
-                <span>تسجيل الخروج</span>
-              </Button>
-            </div>
           </>
         );
       } else {
@@ -185,10 +161,6 @@ export function Navbar() {
                 </div>
               </a>
             </Link>
-            <Button variant="outline" size="sm" onClick={handleSignOut} className="rounded-lg">
-              <LogOut className="ms-2 h-4 w-4" />
-              تسجيل الخروج
-            </Button>
           </div>
         );
       }

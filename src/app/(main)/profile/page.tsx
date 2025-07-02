@@ -7,13 +7,13 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { authRider, dbRider } from '@/lib/firebase';
-import { onAuthStateChanged, type User as FirebaseUserAuth } from 'firebase/auth';
+import { onAuthStateChanged, signOut, type User as FirebaseUserAuth } from 'firebase/auth';
 import { ref, get, update, serverTimestamp } from 'firebase/database';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { Loader2, User, Phone, Save, AlertCircle, MessageCircle } from 'lucide-react';
+import { Loader2, User, Phone, Save, AlertCircle, MessageCircle, LogOut } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 
@@ -165,7 +165,7 @@ export default function ProfilePage() {
         console.log("PROFILE_PAGE_INTERVAL: Cleared support phone number fetch interval.");
       }
     };
-  }, [currentUserAuth, fetchSupportPhoneNumber]); // Re-run if currentUserAuth or fetchSupportPhoneNumber changes
+  }, [currentUserAuth, fetchSupportPhoneNumber]);
 
 
   const onSubmit = async (data: ProfileFormData) => {
@@ -247,6 +247,16 @@ export default function ProfilePage() {
     window.open(whatsappLink, '_blank', 'noopener,noreferrer');
   };
 
+  const handleSignOut = async () => {
+    try {
+      await signOut(authRider);
+      toast({ title: "تم تسجيل الخروج بنجاح" });
+      router.push('/auth/signin');
+    } catch (error) {
+      console.error("Error signing out:", error);
+      toast({ title: "خطأ", description: "حدث خطأ أثناء تسجيل الخروج.", variant: "destructive" });
+    }
+  };
 
   if (isLoading) {
     return (
@@ -331,10 +341,19 @@ export default function ProfilePage() {
             onClick={handleWhatsAppSupport}
             className="w-full p-3 text-base bg-[#25D366] text-white hover:bg-[#1DAE54] focus:bg-[#1DAE54] focus:ring-[#25D366]"
             aria-label="تواصل مع الدعم"
-            disabled={isLoading} // Keep disabled if still loading initial data
+            disabled={isLoading} 
           >
             <MessageCircle className="ms-2 h-5 w-5" />
             <strong>تواصل مع الدعم</strong>
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={handleSignOut}
+            className="w-full p-3 text-base"
+            disabled={isSaving}
+          >
+            <LogOut className="ms-2 h-5 w-5" />
+            تسجيل الخروج
           </Button>
         </CardFooter>
       </Card>
