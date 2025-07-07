@@ -72,7 +72,6 @@ export default function TripDetailsPage() {
               carColor: driverData.vehicleColor || "#FFFFFF",
               carColorName: driverData.vehicleColor,
               clickCode: driverData.paymentMethods?.clickCode || CLICK_PAYMENT_CODE_PLACEHOLDER,
-              phoneNumber: driverData.phoneNumber || driverData.phone || "غير متوفر",
             },
             car: {
               name: driverData.vehicleMakeModel || "غير متوفر",
