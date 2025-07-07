@@ -139,6 +139,11 @@ export interface DisplayableHistoryTrip extends StoredHistoryTrip {
     | 'مؤرشفة (غير معروفة)';
   originalTripExists: boolean;
   originalActualTripStatus?: FirebaseTrip['status'];
+  driverPhoneNumberSnapshot?: string;
+  driverCarModelSnapshot?: string;
+  driverCarNumberSnapshot?: string;
+  driverCarColorSnapshot?: string;
+  driverCarColorNameSnapshot?: string;
 }
 
 export interface GroupedDisplayableTrip {
@@ -149,6 +154,11 @@ export interface GroupedDisplayableTrip {
   departureCityDisplay: string;
   arrivalCityDisplay: string;
   driverNameSnapshot: string;
+  driverPhoneNumberSnapshot?: string;
+  driverCarModelSnapshot?: string;
+  driverCarNumberSnapshot?: string;
+  driverCarColorSnapshot?: string;
+  driverCarColorNameSnapshot?: string;
   overallTripStatusForCancellationLogic: FirebaseTrip['status'] | 'unknown';
   originalTripExists: boolean;
   userBookingsForThisTrip: DisplayableHistoryTrip[];
