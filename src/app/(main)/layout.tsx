@@ -7,7 +7,7 @@ export default function MainAppLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen-svh flex-col">
       <Navbar />
-      <div className="flex-grow pb-16 md:pb-0">
+      <div className="flex-grow pb-16">
         <PageWrapper>
           {children}
         </PageWrapper>

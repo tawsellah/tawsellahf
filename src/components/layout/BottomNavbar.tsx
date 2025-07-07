@@ -32,8 +32,8 @@ export function BottomNavbar() {
   }
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t bg-card/95 shadow-[0_-1px_3px_rgba(0,0,0,0.05)] backdrop-blur supports-[backdrop-filter]:bg-card/60 md:hidden">
-      <div className="container mx-auto grid h-16 max-w-md grid-cols-3 items-center justify-items-center px-4">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t bg-card/95 shadow-[0_-1px_3px_rgba(0,0,0,0.05)] backdrop-blur supports-[backdrop-filter]:bg-card/60">
+      <div className="container mx-auto grid h-16 max-w-lg grid-cols-3 items-center justify-items-center px-4">
         {navItems.map((item) => {
           const isActive = (item.href === '/' && pathname === '/') || (item.href !== '/' && pathname.startsWith(item.href));
           return (
