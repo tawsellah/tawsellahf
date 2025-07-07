@@ -1,15 +1,42 @@
+
 "use client";
 
 import type { Trip } from '@/types';
 import Image from 'next/image';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { User, Car, Palette, BadgeCheck } from 'lucide-react'; 
+import { User, Car, Palette, BadgeCheck, Phone, Copy } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { Button } from '@/components/ui/button';
 
 interface DriverInfoProps {
   driver: Trip['driver'];
 }
 
 export function DriverInfo({ driver }: DriverInfoProps) {
+  const { toast } = useToast();
+
+  const handleCopyPhoneNumber = async () => {
+    if (!driver.phoneNumber || driver.phoneNumber === "غير متوفر") {
+      toast({ title: "خطأ", description: "رقم هاتف السائق غير متوفر.", variant: "destructive" });
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(driver.phoneNumber);
+      toast({
+        title: "تم النسخ بنجاح!",
+        description: "تم نسخ رقم هاتف السائق إلى الحافظة.",
+        className: "bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-200 border-green-300 dark:border-green-600"
+      });
+    } catch (err) {
+      console.error('Failed to copy phone number: ', err);
+      toast({
+        title: "خطأ",
+        description: "لم نتمكن من نسخ الرقم. الرجاء المحاولة يدوياً.",
+        variant: "destructive"
+      });
+    }
+  };
+
   return (
     <Card className="overflow-hidden shadow-md">
       <CardHeader>
@@ -27,6 +54,23 @@ export function DriverInfo({ driver }: DriverInfoProps) {
           />
           <div className="flex-1 space-y-2 text-center sm:text-start">
             <h3 className="text-2xl font-bold text-primary">{driver.name}</h3>
+            
+            {driver.phoneNumber && driver.phoneNumber !== "غير متوفر" && (
+              <div className="flex items-center justify-center sm:justify-start gap-2">
+                <Phone className="h-5 w-5 text-gray-500" />
+                <span className="text-muted-foreground font-mono" dir="ltr">{driver.phoneNumber}</span>
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleCopyPhoneNumber}
+                    className="h-7 w-7"
+                    aria-label="نسخ رقم الهاتف"
+                >
+                    <Copy className="h-4 w-4 text-primary hover:text-primary/80" />
+                </Button>
+              </div>
+            )}
+
             <p className="flex items-center justify-center sm:justify-start gap-2 text-muted-foreground">
               <Car className="h-5 w-5 text-gray-500" />
               <span>{driver.carModel}</span>

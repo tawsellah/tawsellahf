@@ -11,7 +11,7 @@ export interface FirebaseTrip {
   notes?: string;
   offeredSeatIds?: string[];
   offeredSeatsConfig?: {
-    [seatId: string]: boolean | { userId: string; phone: string; fullName: string; bookedAt: number; paymentType?: 'cash' | 'cliq' };
+    [seatId: string]: boolean | { userId: string; phone: string; fullName: string; bookedAt: number; paymentType?: 'cash' | 'cliq'; selectedStop?: string };
   };
   pricePerPassenger: number;
   startPoint: string;
@@ -25,6 +25,7 @@ export interface FirebaseTrip {
       fullName: string;
       bookedAt: number;
       paymentType?: 'cash' | 'cliq';
+      selectedStop?: string;
     };
   };
 }
@@ -70,6 +71,7 @@ export interface Trip {
     carColor: string;
     carColorName?: string;
     clickCode?: string;
+    phoneNumber?: string;
   };
   car: {
     name: string;
@@ -98,7 +100,7 @@ export interface Seat {
   row: 'front' | 'rear' | 'driver';
   position: number;
   price?: number;
-  bookedBy?: { userId: string; phone: string; fullName?: string; bookedAt?: number; paymentType?: 'cash' | 'cliq' };
+  bookedBy?: { userId: string; phone: string; fullName?: string; bookedAt?: number; paymentType?: 'cash' | 'cliq', selectedStop?: string; };
 }
 
 export interface StoredHistoryTrip {
@@ -118,6 +120,7 @@ export interface StoredHistoryTrip {
   paymentType?: 'cash' | 'cliq';
   fullNameSnapshot?: string;
   phoneSnapshot?: string;
+  selectedStop?: string;
 }
 
 export interface DisplayableHistoryTrip extends StoredHistoryTrip {
