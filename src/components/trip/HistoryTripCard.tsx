@@ -44,7 +44,7 @@ export function HistoryTripCard({ tripGroup, onInitiateCancel, isProcessingCance
   const StatusIcon = groupStatusIcons[tripGroup.cardHeaderStatusDisplay] || AlertTriangle;
   
   const bookedSeatsNames = tripGroup.userBookingsForThisTrip
-    .map(b => `${b.seatName}${b.selectedStop && b.selectedStop !== 'destination' ? ` (${b.selectedStop})` : ''}`)
+    .map(b => b.seatName)
     .join('، ');
 
   const totalActivePrice = tripGroup.userBookingsForThisTrip
