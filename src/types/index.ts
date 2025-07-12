@@ -1,6 +1,7 @@
 
 
 
+
 export interface FirebaseTrip {
   createdAt: number;
   dateTime: string; // ISO string e.g., "2025-05-22T06:50:00.000Z"
@@ -72,6 +73,7 @@ export interface Trip {
     carColor: string;
     carColorName?: string;
     clickCode?: string;
+    phoneNumber?: string;
   };
   car: {
     name: string;

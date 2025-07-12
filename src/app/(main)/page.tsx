@@ -1,7 +1,7 @@
 
 "use client";
 
-import { Search, MapPin, Flag, Clock, Loader2 } from 'lucide-react';
+import { Search, MapPin, Flag, Clock, Loader2, ListTodo } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input as ShadInput } from '@/components/ui/input'; // Renamed to avoid conflict
@@ -11,7 +11,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import type { Trip, FirebaseTrip, FirebaseUser } from '@/types';
 import { TripCard } from '@/components/trip/TripCard';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { dbPrimary } from '@/lib/firebase'; 
 import { ref, get } from 'firebase/database';
 import { jordanianGovernorates as governorateDataForConstants } from '@/lib/constants'; // Keep for getGovernorateDisplayNameAr
@@ -21,13 +21,14 @@ import { useToast } from '@/hooks/use-toast';
 const searchSchema = z.object({
   startPoint: z.string().min(1, "نقطة الانطلاق مطلوبة"),
   endPoint: z.string().min(1, "نقطة الوصول مطلوبة"),
-  departureTime: z.string().min(1, "وقت وتاريخ الانطلاق مطلوب"),
+  departureTime: z.string().optional(), // Make optional as it's not always needed
 });
 
 type SearchFormData = z.infer<typeof searchSchema>;
 
 export default function TripSearchPage() {
   const [searchResults, setSearchResults] = useState<Trip[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
   const { toast } = useToast();
   const form = useForm<SearchFormData>({
     resolver: zodResolver(searchSchema),
@@ -38,10 +39,10 @@ export default function TripSearchPage() {
     },
   });
 
-  const onSubmit = async (data: SearchFormData) => {
-    form.clearErrors();
+  // Refactored search logic
+  const executeSearch = async (startPoint: string, endPoint: string, departureTime?: string) => {
+    setIsSearching(true);
     setSearchResults([]);
-    form.setValue('departureTime', data.departureTime); 
 
     try {
       const tripsRef = ref(dbPrimary, 'currentTrips'); 
@@ -49,9 +50,6 @@ export default function TripSearchPage() {
 
       if (snapshot.exists()) {
         const allTripsData = snapshot.val() as Record<string, FirebaseTrip>;
-        
-        const formDepartureDateTime = new Date(data.departureTime);
-
         const matchedFirebaseTrips: FirebaseTrip[] = [];
 
         for (const tripId in allTripsData) {
@@ -60,17 +58,26 @@ export default function TripSearchPage() {
           const tripStartPoint = fbTrip.startPoint || "";
           const tripDestination = fbTrip.destination || "";
 
-          if (tripStartPoint.toLowerCase() === data.startPoint.toLowerCase() &&
-              tripDestination.toLowerCase() === data.endPoint.toLowerCase() &&
-              fbTrip.status === 'upcoming') { 
-            
-            const tripDepartureDateTime = new Date(fbTrip.dateTime); 
-            
-            if (tripDepartureDateTime.getFullYear() === formDepartureDateTime.getFullYear() &&
-                tripDepartureDateTime.getMonth() === formDepartureDateTime.getMonth() &&
-                tripDepartureDateTime.getDate() === formDepartureDateTime.getDate() &&
-                tripDepartureDateTime.getHours() === formDepartureDateTime.getHours() &&
-                tripDepartureDateTime.getMinutes() === formDepartureDateTime.getMinutes()) {
+          const isLocationMatch = tripStartPoint.toLowerCase() === startPoint.toLowerCase() &&
+                                  tripDestination.toLowerCase() === endPoint.toLowerCase();
+
+          if (isLocationMatch && fbTrip.status === 'upcoming') {
+            // If departureTime is provided, match it
+            if (departureTime) {
+              const formDepartureDateTime = new Date(departureTime);
+              const tripDepartureDateTime = new Date(fbTrip.dateTime);
+              
+              const isTimeMatch = tripDepartureDateTime.getFullYear() === formDepartureDateTime.getFullYear() &&
+                                  tripDepartureDateTime.getMonth() === formDepartureDateTime.getMonth() &&
+                                  tripDepartureDateTime.getDate() === formDepartureDateTime.getDate() &&
+                                  tripDepartureDateTime.getHours() === formDepartureDateTime.getHours() &&
+                                  tripDepartureDateTime.getMinutes() === formDepartureDateTime.getMinutes();
+              
+              if (isTimeMatch) {
+                matchedFirebaseTrips.push(fbTrip);
+              }
+            } else {
+              // If no departureTime, it's a "Search All" request, so add all location matches
               matchedFirebaseTrips.push(fbTrip);
             }
           }
@@ -94,7 +101,8 @@ export default function TripSearchPage() {
                   carModel: driverData.vehicleMakeModel || "غير متوفر",
                   carColor: driverData.vehicleColor || "#FFFFFF", 
                   carColorName: driverData.vehicleColor, 
-                  clickCode: driverData.paymentMethods?.clickCode
+                  clickCode: driverData.paymentMethods?.clickCode,
+                  phoneNumber: driverData.phoneNumber || driverData.phone
                 },
                 car: { 
                   name: driverData.vehicleMakeModel || "غير متوفر",
@@ -111,12 +119,17 @@ export default function TripSearchPage() {
                 notes: fbTrip.notes,
                 status: fbTrip.status,
                 seats: generateSeatsFromTripData(fbTrip), 
+                stops: []
               });
             } else {
               console.warn(`Driver data not found for driverId: ${fbTrip.driverId}. User might be in tawsellah-rider or data is missing.`);
             }
           }
+           // Sort results by date and time (soonest first)
+           enrichedTrips.sort((a, b) => new Date(a.firebaseTripData.dateTime).getTime() - new Date(b.firebaseTripData.dateTime).getTime());
+          
           setSearchResults(enrichedTrips);
+
           if (enrichedTrips.length > 0) {
             toast({ title: "تم العثور على رحلات", description: `تم العثور على ${enrichedTrips.length} رحلة مطابقة.` });
           } else {
@@ -131,8 +144,36 @@ export default function TripSearchPage() {
     } catch (error) {
       console.error("Error searching trips:", error);
       toast({ title: "خطأ في البحث", description: "حدث خطأ أثناء البحث عن الرحلات. الرجاء المحاولة مرة أخرى.", variant: "destructive" });
+    } finally {
+      setIsSearching(false);
     }
   };
+
+  // Handler for the original search button (with time)
+  const onSubmitWithTime = async (data: SearchFormData) => {
+    if (!data.departureTime) {
+      form.setError("departureTime", { type: "manual", message: "وقت وتاريخ الانطلاق مطلوب" });
+      return;
+    }
+    await executeSearch(data.startPoint, data.endPoint, data.departureTime);
+  };
+
+  // Handler for the new "Search All" button
+  const handleSearchAll = async () => {
+    // Manually trigger validation for start and end points
+    const isValid = await form.trigger(["startPoint", "endPoint"]);
+    if (!isValid) {
+      toast({
+        title: "معلومات ناقصة",
+        description: "الرجاء اختيار نقطة الانطلاق والوصول أولاً.",
+        variant: "destructive"
+      });
+      return;
+    }
+    const { startPoint, endPoint } = form.getValues();
+    await executeSearch(startPoint, endPoint); // No departureTime is passed
+  };
+
 
   return (
     <div className="space-y-8">
@@ -142,7 +183,7 @@ export default function TripSearchPage() {
       </div>
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <form onSubmit={form.handleSubmit(onSubmitWithTime)} className="space-y-6">
           <FormField
             control={form.control}
             name="startPoint"
@@ -154,13 +195,13 @@ export default function TripSearchPage() {
                 </FormLabel>
                 <FormControl>
                   <DropdownSearch
-                    label="" // Label is handled by FormLabel
-                    icon={<MapPin className="h-5 w-5 text-primary opacity-0" />} // Placeholder for icon positioning, actual icon in FormLabel
+                    label=""
+                    icon={<MapPin className="h-5 w-5 text-primary opacity-0" />}
                     placeholder="اختر محافظة الانطلاق"
                     onSelect={field.onChange}
                     selectedValue={field.value}
                     dir="rtl"
-                    formItemId={field.name} // For associating with FormLabel if needed
+                    formItemId={field.name}
                     error={!!form.formState.errors.startPoint}
                   />
                 </FormControl>
@@ -180,8 +221,8 @@ export default function TripSearchPage() {
                 </FormLabel>
                 <FormControl>
                   <DropdownSearch
-                    label="" // Label is handled by FormLabel
-                    icon={<Flag className="h-5 w-5 text-primary opacity-0" />} // Placeholder for icon positioning
+                    label=""
+                    icon={<Flag className="h-5 w-5 text-primary opacity-0" />}
                     placeholder="اختر محافظة الوصول"
                     onSelect={field.onChange}
                     selectedValue={field.value}
@@ -202,27 +243,38 @@ export default function TripSearchPage() {
               <FormItem>
                 <FormLabel className="flex items-center gap-2">
                   <Clock className="h-5 w-5 text-primary" />
-                  وقت وتاريخ الانطلاق
+                  وقت وتاريخ الانطلاق (للبحث الدقيق)
                 </FormLabel>
                 <FormControl>
-                  <ShadInput type="datetime-local" {...field} />
+                  <ShadInput type="datetime-local" {...field} value={field.value || ''} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
 
-          <Button type="submit" className="w-full p-3 rounded-lg text-base font-semibold transition-all duration-300 ease-in-out hover:bg-primary/90 hover:shadow-md active:scale-95" disabled={form.formState.isSubmitting}>
-            {form.formState.isSubmitting ? <Loader2 className="ms-2 h-5 w-5 animate-spin" /> : <Search className="ms-2 h-5 w-5" />}
-            {form.formState.isSubmitting ? "جارِ البحث..." : "بحث"}
+          <Button type="submit" className="w-full p-3 rounded-lg text-base font-semibold transition-all duration-300 ease-in-out hover:bg-primary/90 hover:shadow-md active:scale-95" disabled={isSearching}>
+            {isSearching ? <Loader2 className="ms-2 h-5 w-5 animate-spin" /> : <Search className="ms-2 h-5 w-5" />}
+            {isSearching ? "جارِ البحث..." : "بحث (حسب الوقت)"}
+          </Button>
+
+           <Button 
+            type="button" 
+            variant="secondary"
+            onClick={handleSearchAll}
+            className="w-full p-3 rounded-lg text-base font-semibold transition-all duration-300 ease-in-out hover:shadow-md active:scale-95" 
+            disabled={isSearching}
+          >
+            {isSearching ? <Loader2 className="ms-2 h-5 w-5 animate-spin" /> : <ListTodo className="ms-2 h-5 w-5" />}
+            {isSearching ? "جارِ البحث..." : "بحث عن كل الرحلات المتاحة"}
           </Button>
         </form>
       </Form>
 
       {searchResults.length > 0 && (
-        <div className="space-y-4">
+        <div className="space-y-4 pt-6">
           <h2 className="text-2xl font-semibold text-center">نتائج البحث</h2>
-          <div className="max-h-[400px] space-y-4 overflow-y-auto rounded-lg p-1">
+          <div className="max-h-[50vh] space-y-4 overflow-y-auto rounded-lg p-2 -m-2">
             {searchResults.map((trip) => (
               <TripCard key={trip.id} trip={trip} />
             ))}
