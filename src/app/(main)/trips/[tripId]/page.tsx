@@ -21,6 +21,7 @@ import { generateSeatsFromTripData, formatTimeToArabicAMPM, formatDateToArabic, 
 import { cn } from '@/lib/utils';
 
 const CLICK_PAYMENT_CODE_PLACEHOLDER = "غير متوفر";
+const BOOKING_FEE = 0.20; // 20 Piasters
 
 export default function TripDetailsPage() {
   const router = useRouter();
@@ -274,6 +275,7 @@ export default function TripDetailsPage() {
         bookedAt: bookedAtTimestamp,
         paymentType: paymentType,
         selectedStop: stopPoint,
+        fees: BOOKING_FEE,
     };
 
     await runTransaction(tripRef, (currentFirebaseTripData: FirebaseTripType | null): FirebaseTripType | undefined => {
@@ -369,6 +371,7 @@ export default function TripDetailsPage() {
             status: 'booked',
             paymentType: paymentType,
             selectedStop: stopPoint,
+            fees: BOOKING_FEE,
           };
           await firebaseSet(newBookingRef, historyTripData);
         }
@@ -382,6 +385,7 @@ export default function TripDetailsPage() {
         bookedAt: Date.now(),
         paymentType: paymentType,
         selectedStop: stopPoint,
+        fees: BOOKING_FEE
     };
 
     setTrip(currentTripUiState => {
@@ -416,42 +420,28 @@ export default function TripDetailsPage() {
     setCurrentPaymentSelectionInDialog(null);
 
     const driverIdForCommission = trip.driver.id;
-    const commissionAmount = 0.20 * bookedSeatsCount;
+    const totalFees = BOOKING_FEE * bookedSeatsCount;
     
     if (!driverIdForCommission) {
         console.error("CRITICAL_COMMISSION_ABORT: driverIdForCommission is undefined or null. Commission cannot be deducted.", trip.driver);
     } else {
         const driverRefForUpdate = ref(dbPrimary, `users/${driverIdForCommission}`);
-        console.log(`COMMISSION_DEDUCTION_GET_UPDATE: Attempting for driver: ${driverIdForCommission} (path: ${driverRefForUpdate.toString()}) for booking of ${bookedSeatsCount} seat(s).`);
+        console.log(`FEE_DEDUCTION: Deducting ${totalFees} from driver: ${driverIdForCommission}`);
         
-        console.log(`COMMISSION_DEDUCTION_DELAY: Adding a 1.5s delay before driver wallet update for ${driverIdForCommission}. Current time: ${new Date().toISOString()}`);
-        await new Promise(resolve => setTimeout(resolve, 1500)); 
-        console.log(`COMMISSION_DEDUCTION_DELAY: Delay finished for ${driverIdForCommission}. Proceeding with get-then-update. Current time: ${new Date().toISOString()}`);
-
         try {
             const driverSnapshot = await get(driverRefForUpdate);
-
             if (!driverSnapshot.exists()) {
-                console.warn(`COMMISSION_DEDUCTION_GET_UPDATE_NOT_FOUND: Driver data NOT FOUND for ID ${driverIdForCommission} at path ${driverRefForUpdate.toString()}. Commission cannot be deducted.`);
+                console.warn(`FEE_DEDUCTION_NOT_FOUND: Driver data NOT FOUND for ID ${driverIdForCommission}. Fees cannot be deducted.`);
             } else {
                 const driverData = driverSnapshot.val() as FirebaseUser;
-                 if (typeof driverData !== 'object' || driverData === null) {
-                    console.warn(`COMMISSION_DEDUCTION_GET_UPDATE_INVALID_DATA: Driver data for ID ${driverIdForCommission} is not a valid object. Data: ${JSON.stringify(driverData)}. Commission cannot be deducted.`);
-                } else {
-                    const currentBalance = Number(driverData.walletBalance) || 0;
-                    const newBalance = currentBalance - commissionAmount;
+                const currentBalance = Number(driverData.walletBalance) || 0;
+                const newBalance = currentBalance - totalFees;
 
-                    const updates: Record<string, any> = {};
-                    updates[`users/${driverIdForCommission}/walletBalance`] = newBalance;
-                    updates[`users/${driverIdForCommission}/updatedAt`] = serverTimestamp();
-                    
-                    await update(ref(dbPrimary), updates);
-                    console.log(`COMMISSION_DEDUCTION_GET_UPDATE_SUCCESS: Successfully updated wallet for driver ${driverIdForCommission}. New balance should be ${newBalance}.`);
-                }
+                await update(driverRefForUpdate, { walletBalance: newBalance, updatedAt: serverTimestamp() });
+                console.log(`FEE_DEDUCTION_SUCCESS: Successfully updated wallet for driver ${driverIdForCommission}. New balance is ${newBalance}.`);
             }
         } catch (error: any) {
-            console.error(`COMMISSION_DEDUCTION_GET_UPDATE_ERROR: Failed to deduct commission for driver ${driverIdForCommission} using get-then-update. Error:`, error.message);
-            console.error("COMMISSION_DEDUCTION_GET_UPDATE_ERROR_FULL: Full error object:", error);
+            console.error(`FEE_DEDUCTION_ERROR: Failed to deduct fees for driver ${driverIdForCommission}. Error:`, error.message);
         }
     }
 

@@ -2,6 +2,7 @@
 
 
 
+
 export interface FirebaseTrip {
   createdAt: number;
   dateTime: string; // ISO string e.g., "2025-05-22T06:50:00.000Z"
@@ -13,7 +14,7 @@ export interface FirebaseTrip {
   notes?: string;
   offeredSeatIds?: string[];
   offeredSeatsConfig?: {
-    [seatId: string]: boolean | { userId: string; phone: string; fullName: string; bookedAt: number; paymentType?: 'cash' | 'cliq'; selectedStop?: string };
+    [seatId: string]: boolean | { userId: string; phone: string; fullName: string; bookedAt: number; paymentType?: 'cash' | 'cliq'; selectedStop?: string; fees?: number };
   };
   pricePerPassenger: number;
   startPoint: string;
@@ -28,6 +29,7 @@ export interface FirebaseTrip {
       bookedAt: number;
       paymentType?: 'cash' | 'cliq';
       selectedStop?: string;
+      fees?: number;
     };
   };
 }
@@ -73,7 +75,6 @@ export interface Trip {
     carColor: string;
     carColorName?: string;
     clickCode?: string;
-    phoneNumber?: string;
   };
   car: {
     name: string;
@@ -102,7 +103,7 @@ export interface Seat {
   row: 'front' | 'rear' | 'driver';
   position: number;
   price?: number;
-  bookedBy?: { userId: string; phone: string; fullName?: string; bookedAt?: number; paymentType?: 'cash' | 'cliq', selectedStop?: string; };
+  bookedBy?: { userId: string; phone: string; fullName?: string; bookedAt?: number; paymentType?: 'cash' | 'cliq', selectedStop?: string; fees?: number; };
 }
 
 export interface StoredHistoryTrip {
@@ -123,6 +124,7 @@ export interface StoredHistoryTrip {
   fullNameSnapshot?: string;
   phoneSnapshot?: string;
   selectedStop?: string;
+  fees?: number;
 }
 
 export interface DisplayableHistoryTrip extends StoredHistoryTrip {

@@ -5,7 +5,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { authRider, dbRider, dbPrimary } from '@/lib/firebase';
 import { onAuthStateChanged, type User as FirebaseUserAuth } from 'firebase/auth';
-import { ref, get, child, query, orderByChild, equalTo, DataSnapshot, runTransaction, set as firebaseSet, push } from 'firebase/database';
+import { ref, get, child, query, orderByChild, equalTo, DataSnapshot, runTransaction, set as firebaseSet, push, update } from 'firebase/database';
 import type { StoredHistoryTrip, DisplayableHistoryTrip, FirebaseTrip, FirebaseUser, GroupedDisplayableTrip } from '@/types';
 import { Button } from '@/components/ui/button';
 import { HistoryTripCard } from '@/components/trip/HistoryTripCard';
@@ -279,6 +279,7 @@ export default function MyTripsPage() {
     setIsProcessingCancellation(true);
     let allSucceeded = true;
     let errorsEncountered: string[] = [];
+    let totalRefundAmount = 0;
 
     for (const booking of bookingsToCancel) {
       try {
@@ -295,12 +296,16 @@ export default function MyTripsPage() {
           if (currentFirebaseTrip.offeredSeatsConfig) {
             const seatDetail = currentFirebaseTrip.offeredSeatsConfig[booking.seatId];
             if (typeof seatDetail === 'object' && seatDetail !== null && seatDetail.userId === currentUserAuth.uid) {
+              const feeToRefund = seatDetail.fees || 0;
+              totalRefundAmount += feeToRefund;
               currentFirebaseTrip.offeredSeatsConfig[booking.seatId] = true; 
               seatUpdated = true;
             }
           } else if (currentFirebaseTrip.passengerDetails && currentFirebaseTrip.offeredSeatIds) {
             const passengerDetail = currentFirebaseTrip.passengerDetails[booking.seatId];
             if (passengerDetail && passengerDetail.userId === currentUserAuth.uid) {
+              const feeToRefund = passengerDetail.fees || 0;
+              totalRefundAmount += feeToRefund;
               delete currentFirebaseTrip.passengerDetails[booking.seatId];
               if (!currentFirebaseTrip.offeredSeatIds.includes(booking.seatId)) {
                 currentFirebaseTrip.offeredSeatIds.push(booking.seatId);
@@ -321,10 +326,29 @@ export default function MyTripsPage() {
 
       } catch (error: any) {
         allSucceeded = false;
+        totalRefundAmount = 0; // Reset refund if any transaction fails
         errorsEncountered.push(`فشل إلغاء حجز المقعد ${booking.seatName}: ${error.message}`);
         console.error(`Cancellation error for booking ${booking.bookingId} (seat ${booking.seatName}):`, error);
       }
     }
+    
+    // Refund fees to driver's wallet if all cancellations succeeded
+    if (allSucceeded && totalRefundAmount > 0 && bookingsToCancel.length > 0) {
+      const driverId = bookingsToCancel[0].driverId;
+      const driverWalletRef = ref(dbPrimary, `users/${driverId}/walletBalance`);
+      try {
+        const snapshot = await get(driverWalletRef);
+        const currentBalance = Number(snapshot.val()) || 0;
+        const newBalance = currentBalance + totalRefundAmount;
+        await update(ref(dbPrimary, `users/${driverId}`), { walletBalance: newBalance, updatedAt: Date.now() });
+        console.log(`FEE_REFUND_SUCCESS: Successfully refunded ${totalRefundAmount} to driver ${driverId}. New balance: ${newBalance}`);
+      } catch (refundError: any) {
+        console.error(`FEE_REFUND_ERROR: Failed to refund fees to driver ${driverId}. Error:`, refundError.message);
+        // Do not block user feedback for this, but log it critically
+        errorsEncountered.push(`فشل في إعادة الرسوم إلى محفظة السائق.`);
+      }
+    }
+
 
     setIsProcessingCancellation(false);
     setShowCancelSingleConfirmDialog(false);
