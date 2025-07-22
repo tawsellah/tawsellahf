@@ -3,7 +3,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { useForm } from 'react-hook-form';
+import { useForm, useForm as useSupportForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { authRider, dbRider } from '@/lib/firebase';
@@ -11,9 +11,11 @@ import { onAuthStateChanged, signOut, type User as FirebaseUserAuth } from 'fire
 import { ref, get, update, serverTimestamp } from 'firebase/database';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { Loader2, User, Phone, Save, AlertCircle, MessageCircle, LogOut } from 'lucide-react';
+import { Loader2, User, Phone, Save, AlertCircle, MessageCircle, LogOut, Send } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 
@@ -29,7 +31,14 @@ const profileFormSchema = z.object({
   phoneNumber: z.string().regex(/^(07[789])\d{7}$/, "يجب أن يكون رقم الهاتف أردني صالح مكون من 10 أرقام ويبدأ بـ 077, 078, أو 079"),
 });
 
+const supportFormSchema = z.object({
+    supportName: z.string().min(3, "الاسم مطلوب."),
+    supportPhone: z.string().regex(/^(07[789])\d{7}$/, "رقم الهاتف غير صالح."),
+    inquiry: z.string().min(10, "الرجاء كتابة استفسار لا يقل عن 10 أحرف."),
+});
+
 type ProfileFormData = z.infer<typeof profileFormSchema>;
+type SupportFormData = z.infer<typeof supportFormSchema>;
 
 const FALLBACK_SUPPORT_PHONE = "0775580440"; 
 
@@ -41,6 +50,7 @@ export default function ProfilePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [supportPhoneNumber, setSupportPhoneNumber] = useState<string>(FALLBACK_SUPPORT_PHONE);
+  const [isSupportDialogOpen, setIsSupportDialogOpen] = useState(false);
 
   const form = useForm<ProfileFormData>({
     resolver: zodResolver(profileFormSchema),
@@ -50,38 +60,30 @@ export default function ProfilePage() {
     },
   });
 
+  const supportForm = useSupportForm<SupportFormData>({
+    resolver: zodResolver(supportFormSchema),
+    defaultValues: {
+      supportName: "",
+      supportPhone: "",
+      inquiry: "",
+    },
+  });
+
   const fetchSupportPhoneNumber = useCallback(async () => {
     const specificPath = 'support/contactPhoneNumber/contact';
-    console.log(`PROFILE_PAGE: Attempting to fetch support phone number from path: ${specificPath}...`);
     try {
       const supportNumRef = ref(dbRider, specificPath);
       const snapshot = await get(supportNumRef);
-      console.log(`PROFILE_PAGE_DEBUG: Snapshot for ${specificPath} exists:`, snapshot.exists());
-
       if (snapshot.exists()) {
         const val = snapshot.val();
-        console.log(`PROFILE_PAGE_DEBUG: Raw value from ${specificPath}:`, JSON.stringify(val));
-        console.log(`PROFILE_PAGE_DEBUG: Type of raw value from ${specificPath}:`, typeof val);
-
         if (typeof val === 'string' && val.trim() !== '') {
           setSupportPhoneNumber(val.trim());
-          console.log(`PROFILE_PAGE: SUCCESS: Updated supportPhoneNumber state to: "${val.trim()}" (from string value in DB) from ${specificPath}`);
         } else if (typeof val === 'number') {
-          const stringVal = String(val);
-          setSupportPhoneNumber(stringVal);
-          console.log(`PROFILE_PAGE: SUCCESS: Updated supportPhoneNumber state to: "${stringVal}" (converted from number in DB) from ${specificPath}`);
+          setSupportPhoneNumber(String(val));
         } else {
-          if (val === null) {
-             console.warn(`PROFILE_PAGE_DEBUG: FALLBACK_REASON: Value from DB at ${specificPath} is NULL. Using fallback.`);
-          } else if (typeof val !== 'string' && typeof val !== 'number') { 
-            console.warn(`PROFILE_PAGE_DEBUG: FALLBACK_REASON: Value from DB at ${specificPath} is NOT a string or number. Type: ${typeof val}. Value: ${JSON.stringify(val)}. Using fallback.`);
-          } else { 
-            console.warn(`PROFILE_PAGE_DEBUG: FALLBACK_REASON: Value from DB at ${specificPath} is an EMPTY string or whitespace. Value: "${val}". Using fallback.`);
-          }
           setSupportPhoneNumber(FALLBACK_SUPPORT_PHONE);
         }
       } else {
-        console.warn(`PROFILE_PAGE_DEBUG: FALLBACK_REASON: Path ${specificPath} NOT FOUND in dbRider. Using fallback '${FALLBACK_SUPPORT_PHONE}'.`);
         setSupportPhoneNumber(FALLBACK_SUPPORT_PHONE);
       }
     } catch (error) {
@@ -108,23 +110,26 @@ export default function ProfilePage() {
           fullName: profileData.fullName,
           phoneNumber: profileData.phoneNumber,
         });
+        supportForm.reset({
+            supportName: profileData.fullName,
+            supportPhone: profileData.phoneNumber,
+            inquiry: "",
+        });
       } else {
         const profileData: UserProfileData = {
             fullName: user.displayName || "",
             phoneNumber: user.phoneNumber || "",
         };
         setUserData(profileData);
-        form.reset({
-          fullName: profileData.fullName,
-          phoneNumber: profileData.phoneNumber,
-        });
+        form.reset(profileData);
+        supportForm.reset({ supportName: profileData.fullName, supportPhone: profileData.phoneNumber, inquiry: "" });
         toast({ title: "ملاحظة", description: "لم يتم العثور على بيانات ملفك الشخصي في قاعدة البيانات. يرجى إكمالها وحفظها.", variant: "default"});
       }
     } catch (error) {
       console.error("Error fetching user data:", error);
       toast({ title: "خطأ", description: "لم نتمكن من تحميل بيانات ملفك الشخصي.", variant: "destructive" });
     }
-  }, [form, toast]);
+  }, [form, supportForm, toast]);
 
 
   useEffect(() => {
@@ -132,7 +137,6 @@ export default function ProfilePage() {
       setIsLoading(true);
       if (user) {
         setCurrentUserAuth(user);
-        // Initial fetch for user data and support phone number
         Promise.all([fetchUserData(user), fetchSupportPhoneNumber()]).then(() => {
           setIsLoading(false);
         });
@@ -145,28 +149,6 @@ export default function ProfilePage() {
     });
     return () => unsubscribe();
   }, [router, fetchUserData, fetchSupportPhoneNumber]);
-
-  // useEffect for periodically fetching the support phone number
-  useEffect(() => {
-    let intervalId: NodeJS.Timeout | null = null;
-
-    if (currentUserAuth) {
-      // Interval starts after user is authenticated.
-      // fetchSupportPhoneNumber is already called once in the onAuthStateChanged effect.
-      intervalId = setInterval(() => {
-        console.log("PROFILE_PAGE_INTERVAL: Re-fetching support phone number every 30 seconds.");
-        fetchSupportPhoneNumber();
-      }, 30000); // 30 seconds
-    }
-
-    return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-        console.log("PROFILE_PAGE_INTERVAL: Cleared support phone number fetch interval.");
-      }
-    };
-  }, [currentUserAuth, fetchSupportPhoneNumber]);
-
 
   const onSubmit = async (data: ProfileFormData) => {
     if (!currentUserAuth) return;
@@ -193,19 +175,26 @@ export default function ProfilePage() {
         if (existingData.createdAt) {
             updates.createdAt = existingData.createdAt;
         } else {
-            updates.createdAt = serverTimestamp(); // Should ideally not happen if createdAt is always set on creation
+            updates.createdAt = serverTimestamp();
         }
       }
 
       await update(userRef, updates);
 
-      setUserData(prev => ({
-        ...(prev || { fullName: "", phoneNumber: ""}), // Ensure prev is not null
+      const updatedProfileData = {
+        ...(userData || { fullName: "", phoneNumber: ""}),
         ...updates,
-        updatedAt: Date.now() // Use client time for immediate UI update of updatedAt
-       } as UserProfileData)); // Cast to UserProfileData
+        updatedAt: Date.now()
+       } as UserProfileData;
 
-      form.reset(data); // Update form with successfully saved data
+      setUserData(updatedProfileData); 
+      form.reset(data); 
+      supportForm.reset({
+          supportName: updatedProfileData.fullName,
+          supportPhone: updatedProfileData.phoneNumber,
+          inquiry: supportForm.getValues('inquiry'),
+      });
+
       toast({ title: "تم بنجاح", description: "تم تحديث بيانات ملفك الشخصي.", className: "bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-200 border-green-300 dark:border-green-600"});
     } catch (error: any) {
       console.error("Error updating profile:", error);
@@ -215,8 +204,7 @@ export default function ProfilePage() {
     }
   };
 
-  const handleWhatsAppSupport = () => {
-    console.log("PROFILE_PAGE: handleWhatsAppSupport called. Current supportPhoneNumber state:", supportPhoneNumber);
+  const handleSupportFormSubmit = (data: SupportFormData) => {
     if (!supportPhoneNumber) {
         toast({ title: "خطأ", description: "رقم هاتف الدعم غير متوفر حاليًا.", variant: "destructive" });
         return;
@@ -230,7 +218,6 @@ export default function ProfilePage() {
     if (numberToUse.startsWith("+")) {
       numberToUse = numberToUse.substring(1);
     }
-
     if (numberToUse.startsWith("07") && numberToUse.length === 10) { 
        numberToUse = "962" + numberToUse.substring(1);
     }
@@ -241,10 +228,12 @@ export default function ProfilePage() {
         return;
     }
 
-    const whatsappLink = `https://wa.me/${numberToUse}`;
-    console.log("PROFILE_PAGE: Opening WhatsApp with number for wa.me:", numberToUse);
-    console.log("PROFILE_PAGE: Full WhatsApp link:", whatsappLink);
+    const message = `*استفسار من راكب:*\n\n*الاسم:* ${data.supportName}\n*رقم الهاتف:* ${data.supportPhone}\n\n*الاستفسار:*\n${data.inquiry}`;
+    const whatsappLink = `https://wa.me/${numberToUse}?text=${encodeURIComponent(message)}`;
+    
     window.open(whatsappLink, '_blank', 'noopener,noreferrer');
+    setIsSupportDialogOpen(false);
+    supportForm.reset({ ...supportForm.getValues(), inquiry: ""}); // Clear inquiry after sending
   };
 
   const handleSignOut = async () => {
@@ -284,6 +273,7 @@ export default function ProfilePage() {
   }
 
   return (
+    <>
     <PageWrapper className="max-w-2xl">
       <Card>
         <CardHeader className="text-center">
@@ -338,7 +328,7 @@ export default function ProfilePage() {
         </CardContent>
         <CardFooter className="flex flex-col gap-4 pt-6 border-t">
           <Button
-            onClick={handleWhatsAppSupport}
+            onClick={() => setIsSupportDialogOpen(true)}
             className="w-full p-3 text-base bg-[#25D366] text-white hover:bg-[#1DAE54] focus:bg-[#1DAE54] focus:ring-[#25D366]"
             aria-label="تواصل مع الدعم"
             disabled={isLoading} 
@@ -358,5 +348,73 @@ export default function ProfilePage() {
         </CardFooter>
       </Card>
     </PageWrapper>
+
+    <Dialog open={isSupportDialogOpen} onOpenChange={setIsSupportDialogOpen}>
+        <DialogContent className="sm:max-w-lg" dir="rtl">
+            <DialogHeader>
+                <DialogTitle className="text-center text-xl">تواصل مع الدعم الفني</DialogTitle>
+                <DialogDescription className="text-center pt-1">
+                    الرجاء ملء النموذج أدناه وسنقوم بإنشاء رسالة واتساب لك.
+                </DialogDescription>
+            </DialogHeader>
+            <Form {...supportForm}>
+                <form onSubmit={supportForm.handleSubmit(handleSupportFormSubmit)} className="space-y-4 py-4">
+                    <FormField
+                        control={supportForm.control}
+                        name="supportName"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>الاسم الكامل</FormLabel>
+                                <FormControl>
+                                    <Input placeholder="اسمك" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+                    <FormField
+                        control={supportForm.control}
+                        name="supportPhone"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>رقم الهاتف</FormLabel>
+                                <FormControl>
+                                    <Input type="tel" placeholder="رقم هاتفك" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+                    <FormField
+                        control={supportForm.control}
+                        name="inquiry"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>الاستفسار</FormLabel>
+                                <FormControl>
+                                    <Textarea
+                                        placeholder="اكتب استفسارك هنا..."
+                                        className="min-h-[120px]"
+                                        {...field}
+                                    />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+                    <DialogFooter className="pt-4">
+                        <DialogClose asChild>
+                            <Button type="button" variant="outline">إلغاء</Button>
+                        </DialogClose>
+                        <Button type="submit" disabled={supportForm.formState.isSubmitting}>
+                            <Send className="ms-2 h-4 w-4" />
+                            إرسال عبر واتساب
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </Form>
+        </DialogContent>
+    </Dialog>
+    </>
   );
 }
