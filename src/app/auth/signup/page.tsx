@@ -46,19 +46,19 @@ export default function SignUpPage() {
 
     try {
       // 1. Check if phone number already exists in the database
-      const usersRef = ref(dbRider, 'users');
-      const phoneQuery = query(usersRef, orderByChild('phoneNumber'), equalTo(data.phoneNumber));
-      const snapshot = await get(phoneQuery);
+      // const usersRef = ref(dbRider, 'users');
+      // const phoneQuery = query(usersRef, orderByChild('phoneNumber'), equalTo(data.phoneNumber));
+      // const snapshot = await get(phoneQuery);
 
-      if (snapshot.exists()) {
-        form.setError("phoneNumber", { message: "رقم الهاتف هذا مسجل بالفعل." });
-        toast({
-          title: "خطأ في إنشاء الحساب",
-          description: "رقم الهاتف هذا مسجل في حساب آخر.",
-          variant: "destructive",
-        });
-        return; 
-      }
+      // if (snapshot.exists()) {
+      //   form.setError("phoneNumber", { message: "رقم الهاتف هذا مسجل بالفعل." });
+      //   toast({
+      //     title: "خطأ في إنشاء الحساب",
+      //     description: "رقم الهاتف هذا مسجل في حساب آخر.",
+      //     variant: "destructive",
+      //   });
+      //   return; 
+      // }
 
       // 2. If phone number is unique, proceed with creating auth user
       const userCredential = await createUserWithEmailAndPassword(authRider, email, data.password);
