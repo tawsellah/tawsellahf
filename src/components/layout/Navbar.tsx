@@ -96,23 +96,25 @@ export function Navbar() {
     </Link>
   );
 
-  if (!isMounted || isLoadingAuth) {
-    return (
-      <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-card/95 shadow-md backdrop-blur supports-[backdrop-filter]:bg-card/60">
-        <div className="container mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <Link href="/" passHref legacyBehavior>
-            <a className="flex items-center gap-2 text-xl font-bold text-primary">
-              <Route className="h-7 w-7" />
-              <span>توصيلة</span>
-            </a>
-          </Link>
-          <div className="h-8 w-24 rounded-md bg-muted animate-pulse md:w-48"></div> {/* Skeleton */}
-        </div>
-      </header>
-    );
-  }
-  
   const renderNavItems = (isMobile = false) => {
+    if (!isMounted || isLoadingAuth) {
+      // Render skeleton or nothing on server and initial client render
+      if (isMobile) {
+        return (
+           <div className="flex items-center gap-3 p-4 border-b">
+              <Avatar>
+                <AvatarFallback className="bg-muted animate-pulse"></AvatarFallback>
+              </Avatar>
+              <div className="space-y-2">
+                <div className="h-4 w-24 rounded-md bg-muted animate-pulse"></div>
+                <div className="h-3 w-32 rounded-md bg-muted animate-pulse"></div>
+              </div>
+            </div>
+        );
+      }
+      return <div className="h-8 w-48 rounded-md bg-muted animate-pulse hidden md:block"></div>;
+    }
+
     if (currentUserAuth && userData) {
       if (isMobile) {
         return (
