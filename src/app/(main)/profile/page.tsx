@@ -105,10 +105,9 @@ export default function ProfilePage() {
     try {
       const userRef = ref(dbRider, `users/${currentUserAuth.uid}`);
 
-      const updates: Partial<Omit<UserProfileData, 'email'>> & {updatedAt: any, uid: string, createdAt?: any, email?: string } = {
+      const updates: Partial<Omit<UserProfileData, 'email' | 'phoneNumber'>> & {updatedAt: any, uid: string, createdAt?: any, email?: string } = {
         uid: currentUserAuth.uid,
         fullName: data.fullName,
-        phoneNumber: data.phoneNumber,
         updatedAt: serverTimestamp()
       };
 
@@ -137,7 +136,7 @@ export default function ProfilePage() {
        } as UserProfileData;
 
       setUserData(updatedProfileData); 
-      form.reset(data); 
+      form.reset({ ...data, phoneNumber: userData?.phoneNumber || "" }); 
 
       toast({ title: "تم بنجاح", description: "تم تحديث بيانات ملفك الشخصي.", className: "bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-200 border-green-300 dark:border-green-600"});
     } catch (error: any) {
@@ -225,7 +224,7 @@ export default function ProfilePage() {
                       رقم الهاتف
                     </FormLabel>
                     <FormControl>
-                      <Input type="tel" placeholder="مثال: 07XXXXXXXX" {...field} value={field.value || ""} />
+                      <Input type="tel" placeholder="مثال: 07XXXXXXXX" {...field} value={field.value || ""} readOnly className="cursor-not-allowed bg-muted/50" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

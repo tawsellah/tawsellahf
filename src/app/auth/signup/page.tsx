@@ -13,7 +13,7 @@ import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
 import { authRider, dbRider } from '@/lib/firebase'; // Use authRider and dbRider
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { ref, set } from 'firebase/database';
+import { ref, set, query, orderByChild, equalTo, get } from 'firebase/database';
 
 const signUpSchema = z.object({
   fullName: z.string().min(3, "يجب أن يكون الاسم الكامل 3 أحرف على الأقل"),
@@ -45,15 +45,31 @@ export default function SignUpPage() {
     const email = `t${data.phoneNumber}@tawsellah.com`;
 
     try {
+      // 1. Check if phone number already exists in the database
+      const usersRef = ref(dbRider, 'users');
+      const phoneQuery = query(usersRef, orderByChild('phoneNumber'), equalTo(data.phoneNumber));
+      const snapshot = await get(phoneQuery);
+
+      if (snapshot.exists()) {
+        form.setError("phoneNumber", { message: "رقم الهاتف هذا مسجل بالفعل." });
+        toast({
+          title: "خطأ في إنشاء الحساب",
+          description: "رقم الهاتف هذا مسجل في حساب آخر.",
+          variant: "destructive",
+        });
+        return; 
+      }
+
+      // 2. If phone number is unique, proceed with creating auth user
       const userCredential = await createUserWithEmailAndPassword(authRider, email, data.password);
       const user = userCredential.user;
 
-      // Save additional user info to Realtime Database (using dbRider)
+      // 3. Save additional user info to Realtime Database
       await set(ref(dbRider, 'users/' + user.uid), {
         uid: user.uid,
         fullName: data.fullName,
         phoneNumber: data.phoneNumber,
-        email: email, // Save the generated email
+        email: email, 
         createdAt: Date.now(),
       });
 
@@ -63,6 +79,7 @@ export default function SignUpPage() {
         className: "bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-200 border-green-300 dark:border-green-600"
       });
       router.push('/auth/signin');
+
     } catch (error) {
       console.error("Error signing up:", error);
       let errorMessage = "حدث خطأ أثناء إنشاء الحساب. الرجاء المحاولة مرة أخرى.";
