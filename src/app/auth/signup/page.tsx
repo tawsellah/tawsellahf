@@ -17,7 +17,7 @@ import { ref, set, query, orderByChild, equalTo, get } from 'firebase/database';
 
 const signUpSchema = z.object({
   fullName: z.string().min(3, "يجب أن يكون الاسم الكامل 3 أحرف على الأقل"),
-  phoneNumber: z.string().regex(/^[0-9]{10}$/, "يجب أن يتكون رقم الهاتف من 10 أرقام (مثال: 05XXXXXXXX)"),
+  phoneNumber: z.string().regex(/^(07[789])\d{7}$/, "يجب أن يكون رقم الهاتف أردني صالح مكون من 10 أرقام ويبدأ بـ 077, 078, أو 079"),
   password: z.string().min(6, "يجب أن تكون كلمة المرور 6 أحرف على الأقل"),
   confirmPassword: z.string().min(6, "يجب أن تكون كلمة المرور 6 أحرف على الأقل"),
 }).refine(data => data.password === data.confirmPassword, {
@@ -155,7 +155,7 @@ export default function SignUpPage() {
                   رقم الهاتف
                 </FormLabel>
                 <FormControl>
-                  <Input type="tel" placeholder="مثال: 05XXXXXXXX" {...field} />
+                  <Input type="tel" placeholder="مثال: 07XXXXXXXX" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
