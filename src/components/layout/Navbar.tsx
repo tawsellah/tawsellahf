@@ -97,7 +97,7 @@ export function Navbar() {
   );
 
   const renderNavItems = (isMobile = false) => {
-    if (!isMounted || isLoadingAuth) {
+    if (isLoadingAuth) {
       // Render skeleton or nothing on server and initial client render
       if (isMobile) {
         return (
@@ -185,7 +185,7 @@ export function Navbar() {
         </Link>
 
         <nav className="hidden md:flex items-center gap-2">
-          {renderNavItems(false)}
+          {isMounted && renderNavItems(false)}
         </nav>
 
         <div className="md:hidden">
@@ -210,7 +210,7 @@ export function Navbar() {
                 </SheetClose>
               </div>
               <nav className="flex flex-col flex-grow"> {/* Added flex-grow */}
-                {renderNavItems(true)}
+                {isMounted && renderNavItems(true)}
               </nav>
             </SheetContent>
           </Sheet>
