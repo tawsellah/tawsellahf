@@ -103,7 +103,7 @@ export function Navbar() {
           <Link href="/" passHref legacyBehavior>
             <a className="flex items-center gap-2 text-xl font-bold text-primary">
               <Route className="h-7 w-7" />
-              <span>رحلتي السريعة</span>
+              <span>توصيلة</span>
             </a>
           </Link>
           <div className="h-8 w-24 rounded-md bg-muted animate-pulse md:w-48"></div> {/* Skeleton */}
@@ -178,7 +178,7 @@ export function Navbar() {
         <Link href="/" passHref legacyBehavior>
           <a className="flex items-center gap-2 text-xl font-bold text-primary transition-transform hover:scale-105">
             <Route className="h-7 w-7" />
-            <span>رحلتي السريعة</span>
+            <span>توصيلة</span>
           </a>
         </Link>
 
@@ -198,7 +198,7 @@ export function Navbar() {
                  <Link href="/" passHref legacyBehavior>
                   <a onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-2 text-lg font-bold text-primary">
                     <Route className="h-6 w-6" />
-                    <span>رحلتي السريعة</span>
+                    <span>توصيلة</span>
                   </a>
                 </Link>
                 <SheetClose asChild>

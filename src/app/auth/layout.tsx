@@ -17,7 +17,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
        </div>
        <Link href="/" className="mb-8 flex items-center gap-2 text-2xl font-bold text-primary transition-transform hover:scale-105">
           <Route className="h-8 w-8" />
-          <span>رحلتي السريعة</span>
+          <span>توصيلة</span>
         </Link>
       <PageWrapper className="w-full max-w-md"> {/* Max width for auth forms can be smaller */}
         {children}
