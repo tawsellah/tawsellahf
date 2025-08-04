@@ -1,7 +1,7 @@
 
 "use client";
 
-import { Search, MapPin, Flag, Clock, Loader2, ListTodo } from 'lucide-react';
+import { Search, MapPin, Flag, Clock, Loader2, ListTodo, ArrowUpDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input as ShadInput } from '@/components/ui/input'; // Renamed to avoid conflict
@@ -11,12 +11,13 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import type { Trip, FirebaseTrip, FirebaseUser } from '@/types';
 import { TripCard } from '@/components/trip/TripCard';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { dbPrimary } from '@/lib/firebase'; 
 import { ref, get } from 'firebase/database';
 import { jordanianGovernorates as governorateDataForConstants } from '@/lib/constants'; // Keep for getGovernorateDisplayNameAr
 import { formatTimeToArabicAMPM, formatDateToArabic, generateSeatsFromTripData, getGovernorateDisplayNameAr } from '@/lib/constants';
 import { useToast } from '@/hooks/use-toast';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const searchSchema = z.object({
   startPoint: z.string().min(1, "نقطة الانطلاق مطلوبة"),
@@ -25,10 +26,12 @@ const searchSchema = z.object({
 });
 
 type SearchFormData = z.infer<typeof searchSchema>;
+type SortOption = 'time-asc' | 'time-desc' | 'price-asc' | 'price-desc';
 
 export default function TripSearchPage() {
-  const [searchResults, setSearchResults] = useState<Trip[]>([]);
+  const [unfilteredResults, setUnfilteredResults] = useState<Trip[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [sortOption, setSortOption] = useState<SortOption>('time-asc');
   const { toast } = useToast();
   const form = useForm<SearchFormData>({
     resolver: zodResolver(searchSchema),
@@ -39,10 +42,35 @@ export default function TripSearchPage() {
     },
   });
 
+  const sortedSearchResults = useMemo(() => {
+    if (unfilteredResults.length === 0) return [];
+    
+    const sorted = [...unfilteredResults];
+
+    switch (sortOption) {
+      case 'time-asc':
+        sorted.sort((a, b) => new Date(a.firebaseTripData.dateTime).getTime() - new Date(b.firebaseTripData.dateTime).getTime());
+        break;
+      case 'time-desc':
+        sorted.sort((a, b) => new Date(b.firebaseTripData.dateTime).getTime() - new Date(a.firebaseTripData.dateTime).getTime());
+        break;
+      case 'price-asc':
+        sorted.sort((a, b) => a.price - b.price);
+        break;
+      case 'price-desc':
+        sorted.sort((a, b) => b.price - a.price);
+        break;
+      default:
+        break;
+    }
+    return sorted;
+  }, [unfilteredResults, sortOption]);
+
   // Refactored search logic
   const executeSearch = async (startPoint: string, endPoint: string, departureTime?: string) => {
     setIsSearching(true);
-    setSearchResults([]);
+    setUnfilteredResults([]);
+    setSortOption('time-asc'); // Reset sort on new search
 
     try {
       const tripsRef = ref(dbPrimary, 'currentTrips'); 
@@ -125,10 +153,8 @@ export default function TripSearchPage() {
               console.warn(`Driver data not found for driverId: ${fbTrip.driverId}. User might be in tawsellah-rider or data is missing.`);
             }
           }
-           // Sort results by date and time (soonest first)
-           enrichedTrips.sort((a, b) => new Date(a.firebaseTripData.dateTime).getTime() - new Date(b.firebaseTripData.dateTime).getTime());
-          
-          setSearchResults(enrichedTrips);
+           
+          setUnfilteredResults(enrichedTrips);
 
           if (enrichedTrips.length > 0) {
             toast({ title: "تم العثور على رحلات", description: `تم العثور على ${enrichedTrips.length} رحلة مطابقة.` });
@@ -271,11 +297,27 @@ export default function TripSearchPage() {
         </form>
       </Form>
 
-      {searchResults.length > 0 && (
+      {unfilteredResults.length > 0 && (
         <div className="space-y-4 pt-6">
-          <h2 className="text-2xl font-semibold text-center">نتائج البحث</h2>
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <h2 className="text-2xl font-semibold text-center sm:text-start">نتائج البحث ({sortedSearchResults.length})</h2>
+            <div className="w-full sm:w-auto">
+              <Select value={sortOption} onValueChange={(value) => setSortOption(value as SortOption)}>
+                  <SelectTrigger className="w-full sm:w-[240px]">
+                      <ArrowUpDown className="ms-2 h-4 w-4" />
+                      <SelectValue placeholder="ترتيب حسب..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                      <SelectItem value="time-asc">الأقرب وقتًا</SelectItem>
+                      <SelectItem value="time-desc">الأبعد وقتًا</SelectItem>
+                      <SelectItem value="price-asc">الأقل سعرًا</SelectItem>
+                      <SelectItem value="price-desc">الأعلى سعرًا</SelectItem>
+                  </SelectContent>
+              </Select>
+            </div>
+          </div>
           <div className="max-h-[50vh] space-y-4 overflow-y-auto rounded-lg p-2 -m-2">
-            {searchResults.map((trip) => (
+            {sortedSearchResults.map((trip) => (
               <TripCard key={trip.id} trip={trip} />
             ))}
           </div>
