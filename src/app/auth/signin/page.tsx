@@ -48,9 +48,22 @@ export default function SignInPage() {
 
     try {
       // IMPORTANT: Firebase rules MUST have an index on phoneNumber for this to work.
+      // This is temporarily disabled to prevent app crashes. The user must add the index.
       // { "rules": { "users": { ".indexOn": "phoneNumber" } } }
       const usersRef = ref(dbRider, 'users');
       const phoneQuery = query(usersRef, orderByChild('phoneNumber'), equalTo(phoneNumber));
+      // const snapshot = await get(phoneQuery); // This line is causing the crash.
+
+      // TEMPORARY FIX: Inform user about required configuration.
+      toast({
+        title: "ميزة غير مفعلة",
+        description: "لاستخدام ميزة استعادة كلمة السر، يجب على مسؤول النظام تفعيل الفهرسة لرقم الهاتف في قواعد بيانات Firebase.",
+        variant: "destructive",
+      });
+      return;
+
+      /*
+      // THIS IS THE CORRECT LOGIC ONCE THE INDEX IS ADDED IN FIREBASE
       const snapshot = await get(phoneQuery);
 
       if (snapshot.exists()) {
@@ -70,6 +83,7 @@ export default function SignInPage() {
       } else {
         throw new Error("لم يتم العثور على حساب مرتبط برقم الهاتف هذا.");
       }
+      */
     } catch (error: any) {
       console.error("Password reset error:", error);
       let errorMessage = error.message || "فشل إرسال بريد إعادة التعيين. الرجاء المحاولة مرة أخرى.";
