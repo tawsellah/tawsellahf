@@ -47,8 +47,9 @@ export default function SignUpPage() {
     
     try {
       // IMPORTANT: To query by phoneNumber, you MUST have an index in your Firebase Rules.
-      // Go to Realtime Database -> Rules and add:
-      // { "rules": { "users": { ".indexOn": "phoneNumber" } } }
+      // Go to Realtime Database -> Rules and add: { "rules": { "users": { ".indexOn": "phoneNumber" } } }
+      // The following check is temporarily disabled to prevent app crashes due to missing index.
+      /*
       const usersRef = ref(dbRider, 'users');
       const phoneQuery = query(usersRef, orderByChild('phoneNumber'), equalTo(data.phoneNumber));
       const snapshot = await get(phoneQuery);
@@ -58,6 +59,7 @@ export default function SignUpPage() {
         toast({ title: "خطأ في التسجيل", description: "رقم الهاتف الذي أدخلته مستخدم بالفعل.", variant: "destructive" });
         return;
       }
+      */
 
       // Use the real email for auth creation
       const userCredential = await createUserWithEmailAndPassword(authRider, data.email, data.password);

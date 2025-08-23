@@ -48,7 +48,15 @@ export default function SignInPage() {
 
     try {
       // IMPORTANT: Firebase rules MUST have an index on phoneNumber for this to work.
+      // This is temporarily disabled to prevent app crashes.
       // { "rules": { "users": { ".indexOn": "phoneNumber" } } }
+      toast({
+          title: "وظيفة غير متاحة مؤقتاً",
+          description: "لإعادة تعيين كلمة المرور، يرجى التواصل مع الدعم. هذه الميزة قيد الصيانة.",
+          variant: "default",
+      });
+      return;
+      /*
       const usersRef = ref(dbRider, 'users');
       const phoneQuery = query(usersRef, orderByChild('phoneNumber'), equalTo(phoneNumber));
       const snapshot = await get(phoneQuery);
@@ -70,6 +78,7 @@ export default function SignInPage() {
       } else {
         throw new Error("لم يتم العثور على حساب مرتبط برقم الهاتف هذا.");
       }
+      */
     } catch (error: any) {
       console.error("Password reset error:", error);
       toast({
