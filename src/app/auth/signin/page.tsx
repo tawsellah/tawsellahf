@@ -48,15 +48,7 @@ export default function SignInPage() {
 
     try {
       // IMPORTANT: Firebase rules MUST have an index on phoneNumber for this to work.
-      // This is temporarily disabled to prevent app crashes.
       // { "rules": { "users": { ".indexOn": "phoneNumber" } } }
-      toast({
-          title: "وظيفة غير متاحة مؤقتاً",
-          description: "لإعادة تعيين كلمة المرور، يرجى التواصل مع الدعم. هذه الميزة قيد الصيانة.",
-          variant: "default",
-      });
-      return;
-      /*
       const usersRef = ref(dbRider, 'users');
       const phoneQuery = query(usersRef, orderByChild('phoneNumber'), equalTo(phoneNumber));
       const snapshot = await get(phoneQuery);
@@ -78,12 +70,15 @@ export default function SignInPage() {
       } else {
         throw new Error("لم يتم العثور على حساب مرتبط برقم الهاتف هذا.");
       }
-      */
     } catch (error: any) {
       console.error("Password reset error:", error);
+      let errorMessage = error.message || "فشل إرسال بريد إعادة التعيين. الرجاء المحاولة مرة أخرى.";
+      if (error.code && error.code.includes('index-not-defined')) {
+          errorMessage = "فشل في عملية البحث. يجب على مسؤول النظام تفعيل الفهرسة لرقم الهاتف."
+      }
       toast({
         title: "خطأ في إعادة تعيين كلمة المرور",
-        description: error.message || "فشل إرسال بريد إعادة التعيين. الرجاء المحاولة مرة أخرى.",
+        description: errorMessage,
         variant: "destructive",
       });
     }
