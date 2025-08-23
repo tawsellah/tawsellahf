@@ -13,7 +13,7 @@ import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
 import { authRider, dbRider } from '@/lib/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { ref, set } from 'firebase/database';
+import { ref, set, get, query, orderByChild, equalTo } from 'firebase/database';
 
 const signUpSchema = z.object({
   fullName: z.string().min(3, "يجب أن يكون الاسم الكامل 3 أحرف على الأقل"),
@@ -46,6 +46,19 @@ export default function SignUpPage() {
     form.clearErrors();
     
     try {
+      // IMPORTANT: To query by phoneNumber, you MUST have an index in your Firebase Rules.
+      // Go to Realtime Database -> Rules and add:
+      // { "rules": { "users": { ".indexOn": "phoneNumber" } } }
+      const usersRef = ref(dbRider, 'users');
+      const phoneQuery = query(usersRef, orderByChild('phoneNumber'), equalTo(data.phoneNumber));
+      const snapshot = await get(phoneQuery);
+
+      if (snapshot.exists()) {
+        form.setError("phoneNumber", { message: "رقم الهاتف هذا مسجل بالفعل." });
+        toast({ title: "خطأ في التسجيل", description: "رقم الهاتف الذي أدخلته مستخدم بالفعل.", variant: "destructive" });
+        return;
+      }
+
       // Use the real email for auth creation
       const userCredential = await createUserWithEmailAndPassword(authRider, data.email, data.password);
       const user = userCredential.user;

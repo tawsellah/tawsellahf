@@ -3,7 +3,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { LogIn, Phone, Lock, Loader2 } from 'lucide-react';
+import { LogIn, Phone, Lock, Loader2, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -11,8 +11,9 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
-import { authRider } from '@/lib/firebase';
+import { authRider, dbRider } from '@/lib/firebase';
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
+import { ref, query, orderByChild, equalTo, get } from 'firebase/database';
 
 const signInSchema = z.object({
   phoneNumber: z.string().regex(/^(07[789])\d{7}$/, "يجب أن يكون رقم الهاتف أردني صالح مكون من 10 أرقام ويبدأ بـ 077, 078, أو 079"),
@@ -33,41 +34,62 @@ export default function SignInPage() {
   });
 
   const handlePasswordReset = async () => {
-      const phoneNumber = form.getValues("phoneNumber");
-      if (!phoneNumber) {
-          toast({
-              title: "معلومات ناقصة",
-              description: "الرجاء إدخال رقم هاتفك أولاً ثم الضغط على نسيت كلمة السر.",
-              variant: "destructive",
-          });
-          return;
-      }
-      // This is a workaround as we can't directly query for the email via phone number securely on the client.
-      // A backend function would be ideal. For now, we inform the user to check their registered email.
+    const phoneNumber = form.getValues("phoneNumber");
+    const isPhoneNumberValid = await form.trigger("phoneNumber");
+    
+    if (!isPhoneNumberValid || !phoneNumber) {
       toast({
-          title: "طلب استعادة كلمة المرور",
-          description: "سيتم إرسال بريد إلكتروني لإعادة تعيين كلمة المرور إلى البريد الإلكتروني المسجل لهذا الحساب إذا كان موجودًا. يرجى التحقق من صندوق الوارد الخاص بك.",
-          variant: "default",
+        title: "رقم هاتف غير صالح",
+        description: "الرجاء إدخال رقم هاتف أردني صالح أولاً.",
+        variant: "destructive",
       });
-      // A more robust solution would involve a Cloud Function to find the email from the phone number and send the reset link.
-      // As a simple client-side approach, we cannot securely implement this.
-      // The user needs to know their email.
-  };
+      return;
+    }
 
+    try {
+      // IMPORTANT: Firebase rules MUST have an index on phoneNumber for this to work.
+      // { "rules": { "users": { ".indexOn": "phoneNumber" } } }
+      const usersRef = ref(dbRider, 'users');
+      const phoneQuery = query(usersRef, orderByChild('phoneNumber'), equalTo(phoneNumber));
+      const snapshot = await get(phoneQuery);
+
+      if (snapshot.exists()) {
+        const userData = Object.values(snapshot.val())[0] as { email?: string };
+        const userEmail = userData.email;
+
+        if (userEmail) {
+          await sendPasswordResetEmail(authRider, userEmail);
+          toast({
+            title: "تم إرسال رابط إعادة التعيين",
+            description: `تم إرسال بريد إلكتروني إلى ${userEmail} مع تعليمات لإعادة تعيين كلمة المرور.`,
+            variant: "default",
+          });
+        } else {
+          throw new Error("لم يتم العثور على بريد إلكتروني مسجل لهذا الحساب.");
+        }
+      } else {
+        throw new Error("لم يتم العثور على حساب مرتبط برقم الهاتف هذا.");
+      }
+    } catch (error: any) {
+      console.error("Password reset error:", error);
+      toast({
+        title: "خطأ في إعادة تعيين كلمة المرور",
+        description: error.message || "فشل إرسال بريد إعادة التعيين. الرجاء المحاولة مرة أخرى.",
+        variant: "destructive",
+      });
+    }
+  };
+  
   const onSubmit = async (data: SignInFormData) => {
     form.clearErrors();
-    // To maintain login via phone number, we need a way to get the associated email.
-    // The previous implementation used a predictable email format.
-    // Since we now use a user-provided email, this login method is flawed
-    // without a server-side lookup.
-    // For now, we will assume the old predictable format for login to maintain functionality,
-    // although this is NOT ROBUST. A real app would need a backend function.
-    // This is a critical security and functionality compromise.
+    // This is a CRITICAL workaround. Because Firebase Auth uses email for sign-in,
+    // but the UI uses phone number, we have to derive the email.
+    // This will ONLY work for users created with the old system (t{phone}@tawsellah.com).
+    // New users with real emails CANNOT log in this way without a backend function
+    // to look up the email from the phone number first.
     const email = `t${data.phoneNumber}@tawsellah.com`; // FLAWED: Assumes old email format.
 
     try {
-      // NOTE: This will only work for users who registered with the old system.
-      // New users who provide a real email CANNOT log in with this method.
       await signInWithEmailAndPassword(authRider, email, data.password);
       toast({
         title: "تم تسجيل الدخول بنجاح!",
@@ -85,7 +107,7 @@ export default function SignInPage() {
           case 'auth/user-not-found':
           case 'auth/wrong-password':
           case 'auth/invalid-credential':
-            errorMessage = "رقم الهاتف أو كلمة المرور غير صحيحة. ملاحظة: تسجيل الدخول حاليًا يعمل فقط للحسابات التي تم إنشاؤها بالطريقة القديمة.";
+             errorMessage = "رقم الهاتف أو كلمة المرور غير صحيحة. ملاحظة: قد لا يعمل تسجيل الدخول للحسابات الجديدة التي تستخدم بريدًا إلكترونيًا حقيقيًا.";
             break;
           case 'auth/invalid-email':
             errorMessage = "صيغة البريد الإلكتروني (المشتقة من رقم الهاتف) غير صالحة. تأكد من إدخال رقم هاتف صحيح.";
