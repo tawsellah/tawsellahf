@@ -13,22 +13,22 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { Loader2, User, Phone, Save, AlertCircle, LogOut } from 'lucide-react';
+import { Loader2, User, Phone, Save, AlertCircle, LogOut, Mail } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PageWrapper } from '@/components/layout/PageWrapper';
 
 interface UserProfileData {
   fullName: string;
   phoneNumber: string;
+  email: string;
   createdAt?: number;
   updatedAt?: number;
 }
 
 const profileFormSchema = z.object({
   fullName: z.string().min(3, "يجب أن يكون الاسم الكامل 3 أحرف على الأقل"),
-  phoneNumber: z.string().regex(/^(07[789])\d{7}$/, "يجب أن يكون رقم الهاتف أردني صالح مكون من 10 أرقام ويبدأ بـ 077, 078, أو 079"),
+  // email and phoneNumber are read-only, so no need for validation here
 });
-
 
 type ProfileFormData = z.infer<typeof profileFormSchema>;
 
@@ -44,8 +44,12 @@ export default function ProfilePage() {
     resolver: zodResolver(profileFormSchema),
     defaultValues: {
       fullName: "",
-      phoneNumber: "",
     },
+  });
+  
+  // Separate form for read-only fields to avoid validation issues
+  const readOnlyForm = useForm<{ phoneNumber: string; email: string; }>({
+    defaultValues: { phoneNumber: "", email: "" }
   });
 
   const fetchUserData = useCallback(async (user: FirebaseUserAuth) => {
@@ -57,28 +61,29 @@ export default function ProfilePage() {
         const profileData: UserProfileData = {
           fullName: dbData.fullName || "",
           phoneNumber: dbData.phoneNumber || "",
+          email: dbData.email || user.email || "غير متوفر",
           createdAt: dbData.createdAt,
           updatedAt: dbData.updatedAt,
         };
         setUserData(profileData);
-        form.reset({
-          fullName: profileData.fullName,
-          phoneNumber: profileData.phoneNumber,
-        });
+        form.reset({ fullName: profileData.fullName });
+        readOnlyForm.reset({ phoneNumber: profileData.phoneNumber, email: profileData.email });
       } else {
         const profileData: UserProfileData = {
             fullName: user.displayName || "",
             phoneNumber: user.phoneNumber || "",
+            email: user.email || "غير متوفر",
         };
         setUserData(profileData);
-        form.reset(profileData);
+        form.reset({ fullName: profileData.fullName });
+        readOnlyForm.reset({ phoneNumber: profileData.phoneNumber, email: profileData.email });
         toast({ title: "ملاحظة", description: "لم يتم العثور على بيانات ملفك الشخصي في قاعدة البيانات. يرجى إكمالها وحفظها.", variant: "default"});
       }
     } catch (error) {
       console.error("Error fetching user data:", error);
       toast({ title: "خطأ", description: "لم نتمكن من تحميل بيانات ملفك الشخصي.", variant: "destructive" });
     }
-  }, [form, toast]);
+  }, [form, readOnlyForm, toast]);
 
 
   useEffect(() => {
@@ -100,43 +105,26 @@ export default function ProfilePage() {
   }, [router, fetchUserData]);
 
   const onSubmit = async (data: ProfileFormData) => {
-    if (!currentUserAuth) return;
+    if (!currentUserAuth || !userData) return;
     setIsSaving(true);
     try {
       const userRef = ref(dbRider, `users/${currentUserAuth.uid}`);
-
-      const updates: Partial<Omit<UserProfileData, 'email' | 'phoneNumber'>> & {updatedAt: any, uid: string, createdAt?: any, email?: string } = {
-        uid: currentUserAuth.uid,
+      
+      // Only update fields that can be changed
+      const updates: Partial<UserProfileData> & {updatedAt: any} = {
         fullName: data.fullName,
         updatedAt: serverTimestamp()
       };
 
-      if (currentUserAuth.email) {
-          updates.email = currentUserAuth.email;
-      }
-
-      const userSnapshot = await get(userRef);
-      if (!userSnapshot.exists()) {
-        updates.createdAt = serverTimestamp();
-      } else {
-        const existingData = userSnapshot.val();
-        if (existingData.createdAt) {
-            updates.createdAt = existingData.createdAt;
-        } else {
-            updates.createdAt = serverTimestamp();
-        }
-      }
-
       await update(userRef, updates);
 
-      const updatedProfileData = {
-        ...(userData || { fullName: "", phoneNumber: ""}),
+      const updatedProfileData: UserProfileData = {
+        ...userData,
         ...updates,
-        updatedAt: Date.now()
-       } as UserProfileData;
+        updatedAt: Date.now(),
+       };
 
       setUserData(updatedProfileData); 
-      form.reset({ ...data, phoneNumber: userData?.phoneNumber || "" }); 
 
       toast({ title: "تم بنجاح", description: "تم تحديث بيانات ملفك الشخصي.", className: "bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-200 border-green-300 dark:border-green-600"});
     } catch (error: any) {
@@ -208,28 +196,44 @@ export default function ProfilePage() {
                       الاسم الكامل
                     </FormLabel>
                     <FormControl>
-                      <Input placeholder="مثال: أحمد محمد" {...field} value={field.value || ""} />
+                      <Input placeholder="مثال: أحمد محمد" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
               <FormField
-                control={form.control}
-                name="phoneNumber"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="flex items-center gap-2">
-                      <Phone className="h-5 w-5 text-muted-foreground" />
-                      رقم الهاتف
-                    </FormLabel>
-                    <FormControl>
-                      <Input type="tel" placeholder="مثال: 07XXXXXXXX" {...field} value={field.value || ""} readOnly className="cursor-not-allowed bg-muted/50" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                  control={readOnlyForm.control}
+                  name="phoneNumber"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center gap-2">
+                        <Phone className="h-5 w-5 text-muted-foreground" />
+                        رقم الهاتف
+                      </FormLabel>
+                      <FormControl>
+                        <Input type="tel" {...field} readOnly className="cursor-not-allowed bg-muted/50" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={readOnlyForm.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center gap-2">
+                        <Mail className="h-5 w-5 text-muted-foreground" />
+                        البريد الإلكتروني
+                      </FormLabel>
+                      <FormControl>
+                        <Input type="email" {...field} readOnly className="cursor-not-allowed bg-muted/50" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
               <Button type="submit" className="w-full p-3 text-base" disabled={isSaving || isLoading}>
                 {isSaving ? <Loader2 className="ms-2 h-5 w-5 animate-spin" /> : <Save className="ms-2 h-5 w-5" />}

@@ -3,7 +3,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { UserPlus, User, Phone, Lock, Check, ArrowLeft, Loader2 } from 'lucide-react'; // Added Loader2
+import { UserPlus, User, Phone, Lock, Check, ArrowLeft, Loader2, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -11,18 +11,19 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
-import { authRider, dbRider } from '@/lib/firebase'; // Use authRider and dbRider
+import { authRider, dbRider } from '@/lib/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { ref, set, query, orderByChild, equalTo, get } from 'firebase/database';
+import { ref, set } from 'firebase/database';
 
 const signUpSchema = z.object({
   fullName: z.string().min(3, "يجب أن يكون الاسم الكامل 3 أحرف على الأقل"),
   phoneNumber: z.string().regex(/^(07[789])\d{7}$/, "يجب أن يكون رقم الهاتف أردني صالح مكون من 10 أرقام ويبدأ بـ 077, 078, أو 079"),
+  email: z.string().email("الرجاء إدخال بريد إلكتروني صالح"),
   password: z.string().min(6, "يجب أن تكون كلمة المرور 6 أحرف على الأقل"),
   confirmPassword: z.string().min(6, "يجب أن تكون كلمة المرور 6 أحرف على الأقل"),
 }).refine(data => data.password === data.confirmPassword, {
   message: "كلمتا المرور غير متطابقتين",
-  path: ["confirmPassword"], // Set error on confirmPassword field
+  path: ["confirmPassword"],
 });
 
 type SignUpFormData = z.infer<typeof signUpSchema>;
@@ -35,6 +36,7 @@ export default function SignUpPage() {
     defaultValues: {
       fullName: "",
       phoneNumber: "",
+      email: "",
       password: "",
       confirmPassword: "",
     },
@@ -42,34 +44,18 @@ export default function SignUpPage() {
 
   const onSubmit = async (data: SignUpFormData) => {
     form.clearErrors();
-    const email = `t${data.phoneNumber}@tawsellah.com`;
-
+    
     try {
-      // 1. Check if phone number already exists in the database
-      // const usersRef = ref(dbRider, 'users');
-      // const phoneQuery = query(usersRef, orderByChild('phoneNumber'), equalTo(data.phoneNumber));
-      // const snapshot = await get(phoneQuery);
-
-      // if (snapshot.exists()) {
-      //   form.setError("phoneNumber", { message: "رقم الهاتف هذا مسجل بالفعل." });
-      //   toast({
-      //     title: "خطأ في إنشاء الحساب",
-      //     description: "رقم الهاتف هذا مسجل في حساب آخر.",
-      //     variant: "destructive",
-      //   });
-      //   return; 
-      // }
-
-      // 2. If phone number is unique, proceed with creating auth user
-      const userCredential = await createUserWithEmailAndPassword(authRider, email, data.password);
+      // Use the real email for auth creation
+      const userCredential = await createUserWithEmailAndPassword(authRider, data.email, data.password);
       const user = userCredential.user;
 
-      // 3. Save additional user info to Realtime Database
+      // Save additional user info to Realtime Database
       await set(ref(dbRider, 'users/' + user.uid), {
         uid: user.uid,
         fullName: data.fullName,
         phoneNumber: data.phoneNumber,
-        email: email, 
+        email: data.email, // Save the real email
         createdAt: Date.now(),
       });
 
@@ -85,13 +71,12 @@ export default function SignUpPage() {
       let errorMessage = "حدث خطأ أثناء إنشاء الحساب. الرجاء المحاولة مرة أخرى.";
       let hasSetFieldSpecificError = false;
 
-      // Type guard to check if the error is a Firebase error
       if (error && typeof error === 'object' && 'code' in error) {
         const firebaseError = error as { code: string; message: string };
         switch (firebaseError.code) {
           case 'auth/email-already-in-use':
-            errorMessage = "هذا البريد الإلكتروني (المشتق من رقم الهاتف) مستخدم بالفعل.";
-            form.setError("phoneNumber", { message: "رقم الهاتف هذا مسجل بالفعل." });
+            errorMessage = "هذا البريد الإلكتروني مستخدم بالفعل.";
+            form.setError("email", { message: errorMessage });
             hasSetFieldSpecificError = true;
             break;
           case 'auth/weak-password':
@@ -100,7 +85,9 @@ export default function SignUpPage() {
             hasSetFieldSpecificError = true;
             break;
           case 'auth/invalid-email':
-            errorMessage = "صيغة البريد الإلكتروني (المشتقة من رقم الهاتف) غير صالحة.";
+            errorMessage = "صيغة البريد الإلكتروني غير صالحة.";
+            form.setError("email", { message: errorMessage });
+            hasSetFieldSpecificError = true;
             break;
           default:
             errorMessage = `فشل إنشاء الحساب: ${firebaseError.message || 'خطأ غير معروف'}`;
@@ -156,6 +143,23 @@ export default function SignUpPage() {
                 </FormLabel>
                 <FormControl>
                   <Input type="tel" placeholder="مثال: 07XXXXXXXX" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="email"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="flex items-center gap-2">
+                  <Mail className="h-5 w-5 text-primary" />
+                  البريد الإلكتروني
+                </FormLabel>
+                <FormControl>
+                  <Input type="email" placeholder="مثال: user@example.com" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
