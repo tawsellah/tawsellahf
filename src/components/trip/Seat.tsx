@@ -1,8 +1,9 @@
+
 "use client";
 
 import type { Seat as SeatType, SeatStatus } from '@/types';
 import { cn } from '@/lib/utils';
-import { Armchair, UserCircle, CheckCircle2, XCircle, Ban } from 'lucide-react'; 
+import { Armchair, UserCircle, CheckCircle2, Ban, PersonStanding, Woman } from 'lucide-react'; 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface SeatProps {
@@ -20,7 +21,7 @@ const seatStyles: Record<SeatStatus, string> = {
   driver: 'bg-seat-driver text-seat-driver-foreground cursor-not-allowed border-2 border-card',
 };
 
-const SeatIcon = ({ status }: { status: SeatStatus }) => {
+const SeatIcon = ({ status, gender }: { status: SeatStatus, gender?: 'male' | 'female' }) => {
   const iconProps = { className: "w-1/2 h-1/2" }; // Icons are 50% of seat size
   switch (status) {
     case 'available':
@@ -28,7 +29,9 @@ const SeatIcon = ({ status }: { status: SeatStatus }) => {
     case 'selected':
       return <CheckCircle2 {...iconProps} />;
     case 'taken':
-      return <Ban {...iconProps} />;
+      if (gender === 'male') return <PersonStanding {...iconProps} />;
+      if (gender === 'female') return <Woman {...iconProps} />;
+      return <Ban {...iconProps} />; // Fallback for 'taken' if no gender
     case 'driver':
       return <UserCircle {...iconProps} />; 
     default:
@@ -49,6 +52,8 @@ export function Seat({ seat, size = 'normal', onClick, playSelectSound, playDese
 
   const seatSizeClass = size === 'normal' ? 'w-24 h-24 md:w-[100px] md:h-[100px]' : 'w-20 h-20 md:w-[90px] md:h-[90px]';
   
+  const bookedByGender = seat.bookedBy?.gender;
+
   return (
     <TooltipProvider delayDuration={200}>
       <Tooltip>
@@ -68,15 +73,15 @@ export function Seat({ seat, size = 'normal', onClick, playSelectSound, playDese
             aria-pressed={seat.status === 'selected'}
             aria-label={`${seat.name} - ${seat.status === 'available' ? 'متاح' : seat.status === 'selected' ? 'مختار' : seat.status === 'taken' ? 'محجوز' : 'السائق'}`}
           >
-            <SeatIcon status={seat.status} />
+            <SeatIcon status={seat.status} gender={bookedByGender} />
             <span className="mt-1 text-xs font-medium truncate px-1">{seat.name.split(" ")[0]}</span> 
           </div>
         </TooltipTrigger>
         <TooltipContent className="bg-foreground text-background p-2 rounded-md shadow-lg" side="top">
-          <p>{seat.name} - {
+           <p>{seat.name} - {
             seat.status === 'available' ? 'متاح' : 
             seat.status === 'selected' ? 'مختار' : 
-            seat.status === 'taken' ? 'محجوز' : 'السائق'
+            seat.status === 'taken' ? `محجوز (${seat.bookedBy?.fullName || 'غير معروف'})` : 'السائق'
           }</p>
         </TooltipContent>
       </Tooltip>
