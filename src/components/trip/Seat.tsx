@@ -3,7 +3,7 @@
 
 import type { Seat as SeatType, SeatStatus } from '@/types';
 import { cn } from '@/lib/utils';
-import { Armchair, UserCircle, CheckCircle2, Ban, PersonStanding, User as UserIcon } from 'lucide-react'; 
+import { Armchair, UserCircle, CheckCircle2, Ban } from 'lucide-react'; 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface SeatProps {
@@ -21,23 +21,39 @@ const seatStyles: Record<SeatStatus, string> = {
   driver: 'bg-seat-driver text-seat-driver-foreground cursor-not-allowed border-2 border-card',
 };
 
-const SeatIcon = ({ status, gender }: { status: SeatStatus, gender?: 'male' | 'female' }) => {
-  const iconProps = { className: "w-1/2 h-1/2" }; // Icons are 50% of seat size
-  switch (status) {
+const SeatContent = ({ seat }: { seat: SeatType }) => {
+  const iconProps = { className: "w-1/2 h-1/2" };
+  switch (seat.status) {
     case 'available':
-      return <Armchair {...iconProps} />;
+      return <>
+        <Armchair {...iconProps} />
+        <span className="mt-1 text-xs font-medium truncate px-1">{seat.name.split(" ")[0]}</span> 
+      </>;
     case 'selected':
-      return <CheckCircle2 {...iconProps} />;
+      return <>
+        <CheckCircle2 {...iconProps} />
+        <span className="mt-1 text-xs font-medium truncate px-1">{seat.name.split(" ")[0]}</span>
+      </>;
     case 'taken':
-      if (gender === 'male') return <PersonStanding {...iconProps} />;
-      if (gender === 'female') return <UserIcon {...iconProps} />;
-      return <Ban {...iconProps} />; // Fallback for 'taken' if no gender
+      if (seat.bookedBy?.gender === 'male') return <span className="font-bold text-lg">ذكر</span>;
+      if (seat.bookedBy?.gender === 'female') return <span className="font-bold text-lg">أنثى</span>;
+      return <>
+        <Ban {...iconProps} />
+        <span className="mt-1 text-xs font-medium truncate px-1">محجوز</span>
+      </>;
     case 'driver':
-      return <UserCircle {...iconProps} />; 
+      return <>
+        <UserCircle {...iconProps} />
+        <span className="mt-1 text-xs font-medium truncate px-1">{seat.name.split(" ")[0]}</span>
+      </>;
     default:
-      return <Armchair {...iconProps} />;
+      return <>
+        <Armchair {...iconProps} />
+        <span className="mt-1 text-xs font-medium truncate px-1">{seat.name.split(" ")[0]}</span>
+      </>;
   }
 };
+
 
 export function Seat({ seat, size = 'normal', onClick, playSelectSound, playDeselectSound }: SeatProps) {
   const isClickable = seat.status === 'available' || seat.status === 'selected';
@@ -51,8 +67,6 @@ export function Seat({ seat, size = 'normal', onClick, playSelectSound, playDese
   };
 
   const seatSizeClass = size === 'normal' ? 'w-24 h-24 md:w-[100px] md:h-[100px]' : 'w-20 h-20 md:w-[90px] md:h-[90px]';
-  
-  const bookedByGender = seat.bookedBy?.gender;
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -73,8 +87,7 @@ export function Seat({ seat, size = 'normal', onClick, playSelectSound, playDese
             aria-pressed={seat.status === 'selected'}
             aria-label={`${seat.name} - ${seat.status === 'available' ? 'متاح' : seat.status === 'selected' ? 'مختار' : seat.status === 'taken' ? 'محجوز' : 'السائق'}`}
           >
-            <SeatIcon status={seat.status} gender={bookedByGender} />
-            <span className="mt-1 text-xs font-medium truncate px-1">{seat.name.split(" ")[0]}</span> 
+            <SeatContent seat={seat} />
           </div>
         </TooltipTrigger>
         <TooltipContent className="bg-foreground text-background p-2 rounded-md shadow-lg" side="top">
@@ -88,5 +101,3 @@ export function Seat({ seat, size = 'normal', onClick, playSelectSound, playDese
     </TooltipProvider>
   );
 }
-
-    
