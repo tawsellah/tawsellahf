@@ -281,30 +281,15 @@ export default function MyTripsPage() {
     let errorsEncountered: string[] = [];
     let totalRefundAmount = 0;
     
-    // Pre-flight check for all bookings
-    for (const booking of bookingsToCancel) {
-        const originalTripRef = ref(dbPrimary, `currentTrips/${booking.tripId}`);
-        const snapshot = await get(originalTripRef);
-        if (!snapshot.exists() || snapshot.val().status !== 'upcoming') {
-            toast({
-                title: "فشل الإلغاء",
-                description: `لم يعد من الممكن إلغاء حجز المقعد "${booking.seatName}" لأن حالة الرحلة قد تغيرت.`,
-                variant: "destructive"
-            });
-            setIsProcessingCancellation(false);
-            fetchHistoryTrips(currentUserAuth); // Refresh list
-            return;
-        }
-    }
-
-
     for (const booking of bookingsToCancel) {
       try {
         const originalTripRef = ref(dbPrimary, `currentTrips/${booking.tripId}`);
         await runTransaction(originalTripRef, (currentFirebaseTrip: FirebaseTrip | null): FirebaseTrip | undefined => {
           if (!currentFirebaseTrip) {
-            // This case should be caught by pre-flight check, but as a safeguard:
-            throw new Error("الرحلة الأصلية غير موجودة.");
+            // This case should be caught if the trip is deleted between pre-flight and transaction.
+            // Returning 'undefined' aborts the transaction.
+            // The error will be caught and handled below.
+            return undefined;
           }
           if (currentFirebaseTrip.status !== 'upcoming') {
             throw new Error("لا يمكن إلغاء الحجز لرحلة ليست قادمة.");
@@ -339,13 +324,22 @@ export default function MyTripsPage() {
           return currentFirebaseTrip;
         });
 
+        // The transaction was successful, now update the history record
         const historyTripRef = ref(dbRider, `historytrips/${currentUserAuth.uid}/${booking.bookingId}`);
         await firebaseSet(child(historyTripRef, 'status'), 'user-cancelled');
 
       } catch (error: any) {
         allSucceeded = false;
         totalRefundAmount = 0; // Reset refund if any transaction fails
-        errorsEncountered.push(`فشل إلغاء حجز المقعد ${booking.seatName}: ${error.message}`);
+        
+        // Check if the error is because the trip was not found in the transaction
+        const snapshot = await get(ref(dbPrimary, `currentTrips/${booking.tripId}`));
+        if (!snapshot.exists()) {
+             errorsEncountered.push(`فشل إلغاء حجز المقعد ${booking.seatName}: لم تعد الرحلة الأصلية موجودة.`);
+        } else {
+             errorsEncountered.push(`فشل إلغاء حجز المقعد ${booking.seatName}: ${error.message}`);
+        }
+        
         console.error(`Cancellation error for booking ${booking.bookingId} (seat ${booking.seatName}):`, error);
       }
     }
