@@ -16,9 +16,10 @@ import { CheckCircle, XCircle, Info, Armchair, Check, ArrowLeft, Loader2, Dollar
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { dbPrimary, authRider, dbRider } from '@/lib/firebase';
-import { ref, get, runTransaction, push, set as firebaseSet, child, update, serverTimestamp } from 'firebase/database';
+import { ref, get, runTransaction, push, set as firebaseSet, child, update, serverTimestamp, query, orderByChild, equalTo } from 'firebase/database';
 import { generateSeatsFromTripData, formatTimeToArabicAMPM, formatDateToArabic, getGovernorateDisplayNameAr, capitalizeFirstLetter } from '@/lib/constants';
 import { cn } from '@/lib/utils';
+import type { User as FirebaseUserAuth } from 'firebase/auth';
 
 const CLICK_PAYMENT_CODE_PLACEHOLDER = "غير متوفر";
 const BOOKING_FEE = 0.20; // 20 Piasters
@@ -151,28 +152,79 @@ export default function TripDetailsPage() {
   }, [tripIdFromParams, fetchTripDetails]);
 
   const handleSeatClick = useCallback((seatId: string) => {
+    // Only allow selecting ONE seat
     setTrip(currentTrip => {
-      if (!currentTrip || isBooking || isCheckingTripStatus) return currentTrip;
-      const seatIndex = currentTrip.seats.findIndex(s => s.id === seatId);
-      if (seatIndex === -1) return currentTrip;
+        if (!currentTrip || isBooking || isCheckingTripStatus) return currentTrip;
 
-      const seat = currentTrip.seats[seatIndex];
-      if (seat.status === 'taken' || seat.status === 'driver') return currentTrip;
+        const seatIndex = currentTrip.seats.findIndex(s => s.id === seatId);
+        if (seatIndex === -1) return currentTrip;
 
-      const newSeats = [...currentTrip.seats];
-      let newSelectedSeatIds: string[];
+        const seat = currentTrip.seats[seatIndex];
+        if (seat.status === 'taken' || seat.status === 'driver') return currentTrip;
 
-      if (seat.status === 'selected') {
-        newSeats[seatIndex] = { ...seat, status: 'available' };
-        newSelectedSeatIds = selectedSeats.filter(id => id !== seatId);
-      } else {
+        // If the clicked seat is already selected, deselect it.
+        if (seat.status === 'selected') {
+            const newSeats = [...currentTrip.seats];
+            newSeats[seatIndex] = { ...seat, status: 'available' };
+            setSelectedSeats([]);
+            return { ...currentTrip, seats: newSeats };
+        }
+
+        // If any other seat is selected, deselect it first.
+        const currentlySelectedSeatIndex = currentTrip.seats.findIndex(s => s.status === 'selected');
+        const newSeats = [...currentTrip.seats];
+
+        if (currentlySelectedSeatIndex > -1) {
+            newSeats[currentlySelectedSeatIndex] = { ...newSeats[currentlySelectedSeatIndex], status: 'available' };
+        }
+
+        // Select the new seat.
         newSeats[seatIndex] = { ...seat, status: 'selected' };
-        newSelectedSeatIds = [...selectedSeats, seatId];
-      }
-      setSelectedSeats(newSelectedSeatIds);
-      return { ...currentTrip, seats: newSeats };
+        setSelectedSeats([seatId]);
+        
+        return { ...currentTrip, seats: newSeats };
     });
-  }, [selectedSeats, isBooking, isCheckingTripStatus]);
+}, [isBooking, isCheckingTripStatus]);
+
+
+  const checkUserCanBook = async (user: FirebaseUserAuth): Promise<{canBook: boolean; reason?: string; action?: 'redirect_profile' | 'info'}> => {
+     // 1. Check for existing active bookings
+    const userHistoryRef = ref(dbRider, `historytrips/${user.uid}`);
+    const historySnapshot = await get(userHistoryRef);
+    if (historySnapshot.exists()) {
+        const historyTrips = historySnapshot.val() as Record<string, StoredHistoryTrip>;
+        const activeBookingPromises = Object.values(historyTrips)
+            .filter(trip => trip.status === 'booked')
+            .map(async (trip) => {
+                const originalTripRef = ref(dbPrimary, `currentTrips/${trip.tripId}`);
+                const originalTripSnapshot = await get(originalTripRef);
+                if (originalTripSnapshot.exists() && originalTripSnapshot.val().status === 'upcoming') {
+                    return true;
+                }
+                return false;
+            });
+        
+        const activeBookings = await Promise.all(activeBookingPromises);
+        if (activeBookings.some(isActive => isActive)) {
+            return { canBook: false, reason: "لديك حجز نشط في رحلة أخرى بالفعل. لا يمكنك حجز أكثر من مقعد واحد في المرة الواحدة.", action: 'info' };
+        }
+    }
+
+    // 2. Check if user profile is complete (phone and gender)
+    const userProfileRef = ref(dbRider, `users/${user.uid}`);
+    const profileSnapshot = await get(userProfileRef);
+    if (profileSnapshot.exists()) {
+        const userData = profileSnapshot.val() as FirebaseUser;
+        if (!userData.phoneNumber || !userData.gender) {
+            return { canBook: false, reason: "الرجاء إكمال ملفك الشخصي (رقم الهاتف والجنس) قبل المتابعة.", action: 'redirect_profile'};
+        }
+    } else {
+        // This case is unlikely if they are logged in, but good to handle
+        return { canBook: false, reason: "لم نتمكن من العثور على ملفك الشخصي. الرجاء تحديثه.", action: 'redirect_profile' };
+    }
+
+    return { canBook: true };
+  }
 
   const handleProceedToPayment = async () => {
     const currentUser = authRider.currentUser;
@@ -202,6 +254,24 @@ export default function TripDetailsPage() {
 
     setIsCheckingTripStatus(true);
     try {
+        // Check if user is allowed to book
+        const bookingCheck = await checkUserCanBook(currentUser);
+        if (!bookingCheck.canBook) {
+            toast({
+                title: "لا يمكن إكمال الحجز",
+                description: bookingCheck.reason,
+                variant: "destructive",
+                action: bookingCheck.action === 'redirect_profile' ? (
+                    <Button onClick={() => router.push('/profile')} variant="outline" size="sm">
+                        <Edit className="ms-1 h-4 w-4" />
+                        الذهاب للملف الشخصي
+                    </Button>
+                ) : undefined
+            });
+            setIsCheckingTripStatus(false);
+            return;
+        }
+
         const tripRef = ref(dbPrimary, `currentTrips/${trip.id}`);
         const currentTripSnapshot = await get(tripRef);
 
@@ -481,8 +551,8 @@ export default function TripDetailsPage() {
     try {
         const userRef = ref(dbRider, `users/${userId}`);
         const userSnapshot = await get(userRef);
-        if (!userSnapshot.exists() || !userSnapshot.val().phoneNumber || !userSnapshot.val().fullName) {
-            toast({ title: "خطأ في الحجز", description: "لم يتم العثور على بيانات المستخدم أو رقم الهاتف أو الاسم.", variant: "destructive" });
+        if (!userSnapshot.exists() || !userSnapshot.val().phoneNumber || !userSnapshot.val().fullName || !userSnapshot.val().gender) {
+            toast({ title: "خطأ في الحجز", description: "الرجاء إكمال ملفك الشخصي (رقم الهاتف والجنس) أولاً.", variant: "destructive" });
             setIsBooking(false);
             return;
         }

@@ -62,6 +62,9 @@ export function SeatLayout({ seats, onSeatClick }: SeatLayoutProps) {
           ))}
         </div>
       )}
+       <div className="text-center text-sm text-muted-foreground mt-4">
+            <p>ملاحظة: يمكنك حجز مقعد واحد فقط في المرة الواحدة.</p>
+        </div>
     </div>
   );
 }
