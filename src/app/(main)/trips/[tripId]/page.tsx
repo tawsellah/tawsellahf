@@ -333,6 +333,7 @@ export default function TripDetailsPage() {
     userId: string,
     userPhoneNumber: string,
     userFullName: string,
+    userGender: 'male' | 'female',
     paymentType: 'cash' | 'cliq',
     stopPoint: string
   ): Promise<void> => {
@@ -342,6 +343,7 @@ export default function TripDetailsPage() {
         userId, 
         phone: userPhoneNumber, 
         fullName: userFullName, 
+        gender: userGender,
         bookedAt: bookedAtTimestamp,
         paymentType: paymentType,
         selectedStop: stopPoint,
@@ -405,6 +407,7 @@ export default function TripDetailsPage() {
     userId: string,
     userPhoneNumber: string,
     userFullName: string,
+    userGender: 'male' | 'female',
     paymentType: 'cash' | 'cliq',
     stopPoint: string
   ) => {
@@ -442,6 +445,7 @@ export default function TripDetailsPage() {
             paymentType: paymentType,
             selectedStop: stopPoint,
             fees: BOOKING_FEE,
+            gender: userGender,
           };
           await firebaseSet(newBookingRef, historyTripData);
         }
@@ -452,6 +456,7 @@ export default function TripDetailsPage() {
         userId, 
         phone: userPhoneNumber, 
         fullName: userFullName, 
+        gender: userGender,
         bookedAt: Date.now(),
         paymentType: paymentType,
         selectedStop: stopPoint,
@@ -546,6 +551,7 @@ export default function TripDetailsPage() {
     const userId = currentUser.uid;
     let userPhoneNumber = '';
     let userFullName = '';
+    let userGender: 'male' | 'female' | undefined;
     const stopPoint = selectedStop; // Use the state variable
 
     try {
@@ -556,11 +562,20 @@ export default function TripDetailsPage() {
             setIsBooking(false);
             return;
         }
-        userPhoneNumber = userSnapshot.val().phoneNumber as string;
-        userFullName = userSnapshot.val().fullName as string;
+        const userData = userSnapshot.val();
+        userPhoneNumber = userData.phoneNumber as string;
+        userFullName = userData.fullName as string;
+        userGender = userData.gender as 'male' | 'female';
+        
     } catch (error: any) {
         console.error("Error fetching user data from dbRider for booking:", error);
         toast({ title: "خطأ في الحجز", description: `خطأ في جلب بيانات المستخدم: ${error.message || 'خطأ غير معروف'}`, variant: "destructive" });
+        setIsBooking(false);
+        return;
+    }
+
+    if (!userGender) { // Redundant check, but good for type safety and logic clarity
+        toast({ title: "خطأ في الحجز", description: "لم يتم تحديد جنس المستخدم في الملف الشخصي. الرجاء التحديث والمحاولة مرة أخرى.", variant: "destructive" });
         setIsBooking(false);
         return;
     }
@@ -589,15 +604,15 @@ export default function TripDetailsPage() {
     }
 
     try {
-      await performSeatUpdateTransaction(currentTripId, userId, userPhoneNumber, userFullName, paymentType, stopPoint);
-      await handleSuccessfulBookingFinalization(currentTripId, userId, userPhoneNumber, userFullName, paymentType, stopPoint);
+      await performSeatUpdateTransaction(currentTripId, userId, userPhoneNumber, userFullName, userGender, paymentType, stopPoint);
+      await handleSuccessfulBookingFinalization(currentTripId, userId, userPhoneNumber, userFullName, userGender, paymentType, stopPoint);
     } catch (error: any) {
       if (error.message === "Trip data not found in transaction.") {
         console.warn(`HANDLED (Attempt 1 Failed - Not Found): Transaction failed for trip ${currentTripId}. User ${currentUser?.uid}, seats ${selectedSeats.join(', ')}. Error: ${error.message}. Retrying after delay...`);
         await new Promise(resolve => setTimeout(resolve, 1200)); 
         try {
-          await performSeatUpdateTransaction(currentTripId, userId, userPhoneNumber, userFullName, paymentType, stopPoint);
-          await handleSuccessfulBookingFinalization(currentTripId, userId, userPhoneNumber, userFullName, paymentType, stopPoint);
+          await performSeatUpdateTransaction(currentTripId, userId, userPhoneNumber, userFullName, userGender, paymentType, stopPoint);
+          await handleSuccessfulBookingFinalization(currentTripId, userId, userPhoneNumber, userFullName, userGender, paymentType, stopPoint);
         } catch (retryError: any) {
           console.error(`HANDLED (Retry Failed): Transaction failed for trip ${currentTripId} after retry. User ${currentUser?.uid}, seats ${selectedSeats.join(', ')}. Error:`, retryError);
           toast({ title: "خطأ في الحجز", description: `لم نتمكن من إكمال الحجز للرحلة (${currentTripId}). قد تكون الرحلة قد حذفت أو لم تعد متوفرة.`, variant: "destructive"});

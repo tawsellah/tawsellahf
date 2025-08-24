@@ -89,7 +89,8 @@ export function generateSeatsFromTripData(tripData: FirebaseTrip): Seat[] {
             userId: seatBookingInfo.userId,
             phone: seatBookingInfo.phone,
             fullName: seatBookingInfo.fullName,
-            bookedAt: seatBookingInfo.bookedAt
+            bookedAt: seatBookingInfo.bookedAt,
+            gender: seatBookingInfo.gender,
         };
       }
       // If seatBookingInfo is false or any other value, it's considered taken without specific user details for this function's scope.
@@ -110,7 +111,8 @@ export function generateSeatsFromTripData(tripData: FirebaseTrip): Seat[] {
             userId: details.userId,
             phone: details.phone,
             fullName: details.fullName,
-            bookedAt: details.bookedAt
+            bookedAt: details.bookedAt,
+            gender: details.gender,
           };
       }
       seats.push({
