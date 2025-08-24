@@ -258,7 +258,7 @@ export default function ProfilePage() {
                             <Users className="h-5 w-5 text-muted-foreground" />
                             الجنس
                         </FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
                             <FormControl>
                             <SelectTrigger>
                                 <SelectValue placeholder="اختر الجنس" />
@@ -297,5 +297,3 @@ export default function ProfilePage() {
     </>
   );
 }
-
-    
