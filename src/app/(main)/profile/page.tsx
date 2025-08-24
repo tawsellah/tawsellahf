@@ -13,21 +13,24 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { Loader2, User, Phone, Save, AlertCircle, LogOut, Mail } from 'lucide-react';
+import { Loader2, User, Phone, Save, AlertCircle, LogOut, Mail, Users } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PageWrapper } from '@/components/layout/PageWrapper';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface UserProfileData {
   fullName: string;
   phoneNumber: string;
   email: string;
+  gender?: 'male' | 'female';
   createdAt?: number;
   updatedAt?: number;
 }
 
 const profileFormSchema = z.object({
   fullName: z.string().min(3, "يجب أن يكون الاسم الكامل 3 أحرف على الأقل"),
-  // email and phoneNumber are read-only, so no need for validation here
+  phoneNumber: z.string().regex(/^(07[789])\d{7}$/, "يجب أن يكون رقم الهاتف أردني صالح مكون من 10 أرقام ويبدأ بـ 077, 078, أو 079").optional().or(z.literal('')),
+  gender: z.enum(["male", "female"], { required_error: "الرجاء تحديد الجنس" }),
 });
 
 type ProfileFormData = z.infer<typeof profileFormSchema>;
@@ -44,12 +47,12 @@ export default function ProfilePage() {
     resolver: zodResolver(profileFormSchema),
     defaultValues: {
       fullName: "",
+      phoneNumber: "",
     },
   });
   
-  // Separate form for read-only fields to avoid validation issues
-  const readOnlyForm = useForm<{ phoneNumber: string; email: string; }>({
-    defaultValues: { phoneNumber: "", email: "" }
+  const readOnlyForm = useForm<{ email: string; }>({
+    defaultValues: { email: "" }
   });
 
   const fetchUserData = useCallback(async (user: FirebaseUserAuth) => {
@@ -59,15 +62,20 @@ export default function ProfilePage() {
       if (snapshot.exists()) {
         const dbData = snapshot.val();
         const profileData: UserProfileData = {
-          fullName: dbData.fullName || "",
-          phoneNumber: dbData.phoneNumber || "",
+          fullName: dbData.fullName || user.displayName || "",
+          phoneNumber: dbData.phoneNumber || user.phoneNumber || "",
           email: dbData.email || user.email || "غير متوفر",
+          gender: dbData.gender,
           createdAt: dbData.createdAt,
           updatedAt: dbData.updatedAt,
         };
         setUserData(profileData);
-        form.reset({ fullName: profileData.fullName });
-        readOnlyForm.reset({ phoneNumber: profileData.phoneNumber, email: profileData.email });
+        form.reset({ 
+            fullName: profileData.fullName,
+            phoneNumber: profileData.phoneNumber,
+            gender: profileData.gender
+        });
+        readOnlyForm.reset({ email: profileData.email });
       } else {
         const profileData: UserProfileData = {
             fullName: user.displayName || "",
@@ -75,8 +83,11 @@ export default function ProfilePage() {
             email: user.email || "غير متوفر",
         };
         setUserData(profileData);
-        form.reset({ fullName: profileData.fullName });
-        readOnlyForm.reset({ phoneNumber: profileData.phoneNumber, email: profileData.email });
+        form.reset({ 
+            fullName: profileData.fullName,
+            phoneNumber: profileData.phoneNumber,
+        });
+        readOnlyForm.reset({ email: profileData.email });
         toast({ title: "ملاحظة", description: "لم يتم العثور على بيانات ملفك الشخصي في قاعدة البيانات. يرجى إكمالها وحفظها.", variant: "default"});
       }
     } catch (error) {
@@ -110,9 +121,10 @@ export default function ProfilePage() {
     try {
       const userRef = ref(dbRider, `users/${currentUserAuth.uid}`);
       
-      // Only update fields that can be changed
       const updates: Partial<UserProfileData> & {updatedAt: any} = {
         fullName: data.fullName,
+        phoneNumber: data.phoneNumber,
+        gender: data.gender,
         updatedAt: serverTimestamp()
       };
 
@@ -202,23 +214,8 @@ export default function ProfilePage() {
                   </FormItem>
                 )}
               />
+
               <FormField
-                  control={readOnlyForm.control}
-                  name="phoneNumber"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="flex items-center gap-2">
-                        <Phone className="h-5 w-5 text-muted-foreground" />
-                        رقم الهاتف
-                      </FormLabel>
-                      <FormControl>
-                        <Input type="tel" {...field} readOnly className="cursor-not-allowed bg-muted/50" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
                   control={readOnlyForm.control}
                   name="email"
                   render={({ field }) => (
@@ -233,6 +230,48 @@ export default function ProfilePage() {
                       <FormMessage />
                     </FormItem>
                   )}
+                />
+
+                <FormField
+                    control={form.control}
+                    name="phoneNumber"
+                    render={({ field }) => (
+                    <FormItem>
+                        <FormLabel className="flex items-center gap-2">
+                        <Phone className="h-5 w-5 text-muted-foreground" />
+                        رقم الهاتف
+                        </FormLabel>
+                        <FormControl>
+                        <Input type="tel" placeholder="مثال: 07XXXXXXXX" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                    </FormItem>
+                    )}
+                />
+
+                <FormField
+                    control={form.control}
+                    name="gender"
+                    render={({ field }) => (
+                        <FormItem>
+                        <FormLabel className="flex items-center gap-2">
+                            <Users className="h-5 w-5 text-muted-foreground" />
+                            الجنس
+                        </FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                            <SelectTrigger>
+                                <SelectValue placeholder="اختر الجنس" />
+                            </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                            <SelectItem value="male">ذكر</SelectItem>
+                            <SelectItem value="female">أنثى</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <FormMessage />
+                        </FormItem>
+                    )}
                 />
 
               <Button type="submit" className="w-full p-3 text-base" disabled={isSaving || isLoading}>
@@ -258,3 +297,5 @@ export default function ProfilePage() {
     </>
   );
 }
+
+    

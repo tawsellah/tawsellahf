@@ -4,6 +4,7 @@
 
 
 
+
 export interface FirebaseTrip {
   createdAt: number;
   dateTime: string; // ISO string e.g., "2025-05-22T06:50:00.000Z"
@@ -61,6 +62,7 @@ export interface FirebaseUser {
   vehicleType?: string;
   vehicleYear?: string;
   walletBalance?: number;
+  gender?: 'male' | 'female';
 }
 
 export interface Trip {
@@ -178,3 +180,5 @@ export interface GroupedDisplayableTrip {
     | 'حالية';
   canCancelAnyBookingInGroup: boolean;
 }
+
+    
