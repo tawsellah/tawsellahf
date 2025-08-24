@@ -280,12 +280,30 @@ export default function MyTripsPage() {
     let allSucceeded = true;
     let errorsEncountered: string[] = [];
     let totalRefundAmount = 0;
+    
+    // Pre-flight check for all bookings
+    for (const booking of bookingsToCancel) {
+        const originalTripRef = ref(dbPrimary, `currentTrips/${booking.tripId}`);
+        const snapshot = await get(originalTripRef);
+        if (!snapshot.exists() || snapshot.val().status !== 'upcoming') {
+            toast({
+                title: "فشل الإلغاء",
+                description: `لم يعد من الممكن إلغاء حجز المقعد "${booking.seatName}" لأن حالة الرحلة قد تغيرت.`,
+                variant: "destructive"
+            });
+            setIsProcessingCancellation(false);
+            fetchHistoryTrips(currentUserAuth); // Refresh list
+            return;
+        }
+    }
+
 
     for (const booking of bookingsToCancel) {
       try {
         const originalTripRef = ref(dbPrimary, `currentTrips/${booking.tripId}`);
         await runTransaction(originalTripRef, (currentFirebaseTrip: FirebaseTrip | null): FirebaseTrip | undefined => {
           if (!currentFirebaseTrip) {
+            // This case should be caught by pre-flight check, but as a safeguard:
             throw new Error("الرحلة الأصلية غير موجودة.");
           }
           if (currentFirebaseTrip.status !== 'upcoming') {
@@ -514,3 +532,5 @@ export default function MyTripsPage() {
     </div>
   );
 }
+
+    
