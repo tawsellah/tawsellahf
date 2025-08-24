@@ -3,7 +3,7 @@
 
 import type { Seat as SeatType, SeatStatus } from '@/types';
 import { cn } from '@/lib/utils';
-import { Armchair, UserCircle, CheckCircle2, Ban, PersonStanding, Woman } from 'lucide-react'; 
+import { Armchair, UserCircle, CheckCircle2, Ban, PersonStanding, User as UserIcon } from 'lucide-react'; 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface SeatProps {
@@ -30,7 +30,7 @@ const SeatIcon = ({ status, gender }: { status: SeatStatus, gender?: 'male' | 'f
       return <CheckCircle2 {...iconProps} />;
     case 'taken':
       if (gender === 'male') return <PersonStanding {...iconProps} />;
-      if (gender === 'female') return <Woman {...iconProps} />;
+      if (gender === 'female') return <UserIcon {...iconProps} />;
       return <Ban {...iconProps} />; // Fallback for 'taken' if no gender
     case 'driver':
       return <UserCircle {...iconProps} />; 
@@ -88,3 +88,5 @@ export function Seat({ seat, size = 'normal', onClick, playSelectSound, playDese
     </TooltipProvider>
   );
 }
+
+    

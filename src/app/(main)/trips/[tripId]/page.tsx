@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogC
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { CheckCircle, XCircle, Info, Armchair, Check, ArrowLeft, Loader2, DollarSign, Smartphone, Copy, MapPin, LogIn, CircleHelp, Route as RouteIcon, Users, Edit, PersonStanding, Woman } from 'lucide-react';
+import { CheckCircle, XCircle, Info, Armchair, Check, ArrowLeft, Loader2, DollarSign, Smartphone, Copy, MapPin, LogIn, CircleHelp, Route as RouteIcon, Users, Edit, PersonStanding, User as UserIcon } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { dbPrimary, authRider, dbRider } from '@/lib/firebase';
@@ -747,7 +747,7 @@ export default function TripDetailsPage() {
            <div className="flex items-center gap-1.5">
             <div className="w-4 h-4 rounded-sm bg-seat-taken"></div>
             <span>محجوز (أنثى)</span>
-            <Woman className="w-4 h-4" />
+            <UserIcon className="w-4 h-4" />
           </div>
         </div>
         <p className="text-center font-bold text-primary text-lg">
@@ -860,3 +860,5 @@ export default function TripDetailsPage() {
     </div>
   );
 }
+
+    
