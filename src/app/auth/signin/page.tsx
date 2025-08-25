@@ -26,7 +26,7 @@ const GoogleIcon = () => (
 
 
 const signInSchema = z.object({
-  email: z.string().email("الرجاء إدخال بريد إلكتروني صالح."),
+  phoneNumber: z.string().regex(/^(07[789])\d{7}$/, "يجب أن يكون رقم الهاتف أردني صالح مكون من 10 أرقام ويبدأ بـ 077, 078, أو 079"),
   password: z.string().min(6, "يجب أن تكون كلمة المرور 6 أحرف على الأقل"),
 });
 
@@ -38,31 +38,47 @@ export default function SignInPage() {
   const form = useForm<SignInFormData>({
     resolver: zodResolver(signInSchema),
     defaultValues: {
-      email: "",
+      phoneNumber: "",
       password: "",
     },
   });
 
   const handlePasswordReset = async () => {
-    const email = form.getValues("email");
-    const isEmailValid = await form.trigger("email");
+    const phoneNumber = form.getValues("phoneNumber");
+    const isPhoneValid = await form.trigger("phoneNumber");
 
-    if (!isEmailValid || !email) {
+    if (!isPhoneValid || !phoneNumber) {
       toast({
-        title: "بريد إلكتروني غير صالح",
-        description: "الرجاء إدخال بريد إلكتروني صالح أولاً.",
+        title: "رقم هاتف غير صالح",
+        description: "الرجاء إدخال رقم هاتف صالح أولاً.",
         variant: "destructive",
       });
       return;
     }
 
     try {
-        await sendPasswordResetEmail(authRider, email);
-        toast({
+      const usersRef = ref(dbRider, 'users');
+      const userQuery = query(usersRef, orderByChild('phoneNumber'), equalTo(phoneNumber));
+      const snapshot = await get(userQuery);
+
+      if (snapshot.exists()) {
+        const usersData = snapshot.val();
+        const userId = Object.keys(usersData)[0];
+        const userEmail = usersData[userId].email;
+
+        if (userEmail) {
+          await sendPasswordResetEmail(authRider, userEmail);
+          toast({
             title: "تم إرسال رابط إعادة التعيين",
-            description: `تم إرسال بريد إلكتروني إلى ${email} مع تعليمات لإعادة تعيين كلمة المرور.`,
+            description: `تم إرسال بريد إلكتروني إلى البريد المرتبط برقمك مع تعليمات لإعادة تعيين كلمة المرور.`,
             variant: "default",
-        });
+          });
+        } else {
+           toast({ title: "خطأ", description: "لم يتم العثور على بريد إلكتروني مرتبط بهذا الحساب.", variant: "destructive" });
+        }
+      } else {
+        toast({ title: "خطأ", description: "لم يتم العثور على حساب مرتبط برقم الهاتف هذا.", variant: "destructive" });
+      }
     } catch (error: any) {
       console.error("Password reset error:", error);
       toast({
@@ -116,9 +132,10 @@ export default function SignInPage() {
 
   const onSubmit = async (data: SignInFormData) => {
     form.clearErrors();
+    const manufacturedEmail = `t${data.phoneNumber}@tawsellah.com`;
     
     try {
-      await signInWithEmailAndPassword(authRider, data.email, data.password);
+      await signInWithEmailAndPassword(authRider, manufacturedEmail, data.password);
       toast({
         title: "تم تسجيل الدخول بنجاح!",
         description: "أهلاً بك مجدداً.",
@@ -135,10 +152,10 @@ export default function SignInPage() {
           case 'auth/user-not-found':
           case 'auth/wrong-password':
           case 'auth/invalid-credential':
-             errorMessage = "البريد الإلكتروني أو كلمة المرور غير صحيحة.";
+             errorMessage = "رقم الهاتف أو كلمة المرور غير صحيحة.";
             break;
           case 'auth/invalid-email':
-            errorMessage = "صيغة البريد الإلكتروني غير صالحة.";
+            errorMessage = "صيغة البريد الإلكتروني المُصنّعة غير صالحة.";
             break;
           case 'auth/too-many-requests':
             errorMessage = "تم حظر الوصول مؤقتًا بسبب عدد كبير جدًا من محاولات تسجيل الدخول الفاشلة. يرجى المحاولة مرة أخرى لاحقًا.";
@@ -153,7 +170,7 @@ export default function SignInPage() {
         description: errorMessage,
         variant: "destructive",
       });
-      form.setError("root", { message: "البريد الإلكتروني أو كلمة المرور غير صحيحة." });
+      form.setError("root", { message: "رقم الهاتف أو كلمة المرور غير صحيحة." });
     }
   };
 
@@ -184,15 +201,15 @@ export default function SignInPage() {
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           <FormField
             control={form.control}
-            name="email"
+            name="phoneNumber"
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="flex items-center gap-2">
-                  <Mail className="h-5 w-5 text-primary" />
-                  البريد الإلكتروني
+                  <Phone className="h-5 w-5 text-primary" />
+                  رقم الهاتف
                 </FormLabel>
                 <FormControl>
-                  <Input type="email" placeholder="user@example.com" {...field} />
+                  <Input type="tel" placeholder="07XXXXXXXX" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -249,5 +266,3 @@ export default function SignInPage() {
     </div>
   );
 }
-
-    

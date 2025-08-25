@@ -28,7 +28,7 @@ const GoogleIcon = () => (
 const signUpSchema = z.object({
   fullName: z.string().min(3, "يجب أن يكون الاسم الكامل 3 أحرف على الأقل"),
   phoneNumber: z.string().regex(/^(07[789])\d{7}$/, "يجب أن يكون رقم الهاتف أردني صالح مكون من 10 أرقام ويبدأ بـ 077, 078, أو 079"),
-  email: z.string().email("الرجاء إدخال بريد إلكتروني صالح"),
+  email: z.string().email("الرجاء إدخال بريد إلكتروني صالح").optional().or(z.literal('')),
   gender: z.enum(["male", "female"], { required_error: "الرجاء تحديد الجنس" }),
   password: z.string().min(6, "يجب أن تكون كلمة المرور 6 أحرف على الأقل"),
   confirmPassword: z.string().min(6, "يجب أن تكون كلمة المرور 6 أحرف على الأقل"),
@@ -95,17 +95,32 @@ export default function SignUpPage() {
   const onSubmit = async (data: SignUpFormData) => {
     form.clearErrors();
     
+    // Check if phone number is already registered
+    const usersRef = ref(dbRider, 'users');
+    const phoneQuery = query(usersRef, orderByChild('phoneNumber'), equalTo(data.phoneNumber));
+    const phoneSnapshot = await get(phoneQuery);
+
+    if (phoneSnapshot.exists()) {
+        form.setError("phoneNumber", { message: "رقم الهاتف هذا مسجل بالفعل." });
+        toast({
+            title: "خطأ في التسجيل",
+            description: "رقم الهاتف هذا مسجل بالفعل.",
+            variant: "destructive",
+        });
+        return;
+    }
+
+    const emailForAuth = data.email || `t${data.phoneNumber}@tawsellah.com`;
+
     try {
-      // Use the real email for auth creation
-      const userCredential = await createUserWithEmailAndPassword(authRider, data.email, data.password);
+      const userCredential = await createUserWithEmailAndPassword(authRider, emailForAuth, data.password);
       const user = userCredential.user;
 
-      // Save additional user info to Realtime Database
       await set(ref(dbRider, 'users/' + user.uid), {
         uid: user.uid,
         fullName: data.fullName,
         phoneNumber: data.phoneNumber,
-        email: data.email,
+        email: emailForAuth, // Save the email used for auth
         gender: data.gender,
         createdAt: Date.now(),
       });
@@ -126,8 +141,8 @@ export default function SignUpPage() {
         const firebaseError = error as { code: string; message: string };
         switch (firebaseError.code) {
           case 'auth/email-already-in-use':
-            errorMessage = "هذا البريد الإلكتروني مستخدم بالفعل.";
-            form.setError("email", { message: errorMessage });
+            errorMessage = "هذا البريد الإلكتروني أو رقم الهاتف مستخدم بالفعل.";
+            form.setError("phoneNumber", { message: "رقم الهاتف أو البريد الإلكتروني مرتبط بحساب آخر" });
             hasSetFieldSpecificError = true;
             break;
           case 'auth/weak-password':
@@ -222,11 +237,12 @@ export default function SignUpPage() {
               <FormItem>
                 <FormLabel className="flex items-center gap-2">
                   <Mail className="h-5 w-5 text-primary" />
-                  البريد الإلكتروني
+                  البريد الإلكتروني (اختياري)
                 </FormLabel>
                 <FormControl>
                   <Input type="email" placeholder="مثال: user@example.com" {...field} />
                 </FormControl>
+                 <p className="text-xs text-muted-foreground pt-1">إذا تركته فارغاً، سيتم إنشاء بريد إلكتروني تلقائي مرتبط برقم هاتفك.</p>
                 <FormMessage />
               </FormItem>
             )}
@@ -320,5 +336,3 @@ export default function SignUpPage() {
     </div>
   );
 }
-
-    

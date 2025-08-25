@@ -7,7 +7,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { authRider, dbRider } from '@/lib/firebase';
-import { onAuthStateChanged, signOut, type User as FirebaseUserAuth } from 'firebase/auth';
+import { onAuthStateChanged, signOut, type User as FirebaseUserAuth, updateEmail } from 'firebase/auth';
 import { ref, get, update, serverTimestamp } from 'firebase/database';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,6 +29,7 @@ interface UserProfileData {
 
 const profileFormSchema = z.object({
   fullName: z.string().min(3, "يجب أن يكون الاسم الكامل 3 أحرف على الأقل"),
+  email: z.string().email("الرجاء إدخال بريد إلكتروني صالح.").optional().or(z.literal('')),
   phoneNumber: z.string().regex(/^(07[789])\d{7}$/, "يجب أن يكون رقم الهاتف أردني صالح مكون من 10 أرقام ويبدأ بـ 077, 078, أو 079").optional().or(z.literal('')),
   gender: z.enum(["male", "female"], { required_error: "الرجاء تحديد الجنس" }),
 });
@@ -47,12 +48,9 @@ export default function ProfilePage() {
     resolver: zodResolver(profileFormSchema),
     defaultValues: {
       fullName: "",
+      email: "",
       phoneNumber: "",
     },
-  });
-  
-  const readOnlyForm = useForm<{ email: string; }>({
-    defaultValues: { email: "" }
   });
 
   const fetchUserData = useCallback(async (user: FirebaseUserAuth) => {
@@ -72,10 +70,10 @@ export default function ProfilePage() {
         setUserData(profileData);
         form.reset({ 
             fullName: profileData.fullName,
+            email: profileData.email,
             phoneNumber: profileData.phoneNumber,
             gender: profileData.gender
         });
-        readOnlyForm.reset({ email: profileData.email });
       } else {
         const profileData: UserProfileData = {
             fullName: user.displayName || "",
@@ -85,16 +83,16 @@ export default function ProfilePage() {
         setUserData(profileData);
         form.reset({ 
             fullName: profileData.fullName,
+            email: profileData.email,
             phoneNumber: profileData.phoneNumber,
         });
-        readOnlyForm.reset({ email: profileData.email });
         toast({ title: "ملاحظة", description: "لم يتم العثور على بيانات ملفك الشخصي في قاعدة البيانات. يرجى إكمالها وحفظها.", variant: "default"});
       }
     } catch (error) {
       console.error("Error fetching user data:", error);
       toast({ title: "خطأ", description: "لم نتمكن من تحميل بيانات ملفك الشخصي.", variant: "destructive" });
     }
-  }, [form, readOnlyForm, toast]);
+  }, [form, toast]);
 
 
   useEffect(() => {
@@ -127,6 +125,13 @@ export default function ProfilePage() {
         gender: data.gender,
         updatedAt: serverTimestamp()
       };
+      
+      if (data.email && data.email !== currentUserAuth.email) {
+          updates.email = data.email;
+          if (!currentUserAuth.email?.includes('@tawsellah.com')) {
+              await updateEmail(currentUserAuth, data.email);
+          }
+      }
 
       await update(userRef, updates);
 
@@ -216,7 +221,7 @@ export default function ProfilePage() {
               />
 
               <FormField
-                  control={readOnlyForm.control}
+                  control={form.control}
                   name="email"
                   render={({ field }) => (
                     <FormItem>
@@ -225,7 +230,12 @@ export default function ProfilePage() {
                         البريد الإلكتروني
                       </FormLabel>
                       <FormControl>
-                        <Input type="email" {...field} readOnly className="cursor-not-allowed bg-muted/50" />
+                        <Input 
+                            type="email" 
+                            {...field} 
+                            disabled={currentUserAuth.providerData.some(p => p.providerId === 'google.com')}
+                            className={currentUserAuth.providerData.some(p => p.providerId === 'google.com') ? "cursor-not-allowed bg-muted/50" : ""}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
