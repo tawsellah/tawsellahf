@@ -21,7 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 interface UserProfileData {
   fullName: string;
   phoneNumber: string;
-  email: string;
+  email: string; // Keep for internal logic, but hide from UI
   gender?: 'male' | 'female';
   createdAt?: number;
   updatedAt?: number;
@@ -29,7 +29,6 @@ interface UserProfileData {
 
 const profileFormSchema = z.object({
   fullName: z.string().min(3, "يجب أن يكون الاسم الكامل 3 أحرف على الأقل"),
-  email: z.string().email("الرجاء إدخال بريد إلكتروني صالح.").optional().or(z.literal('')),
   phoneNumber: z.string().regex(/^(07[789])\d{7}$/, "يجب أن يكون رقم الهاتف أردني صالح مكون من 10 أرقام ويبدأ بـ 077, 078, أو 079").optional().or(z.literal('')),
   gender: z.enum(["male", "female"], { required_error: "الرجاء تحديد الجنس" }),
 });
@@ -43,12 +42,12 @@ export default function ProfilePage() {
   const [userData, setUserData] = useState<UserProfileData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isGenderLocked, setIsGenderLocked] = useState(false);
 
   const form = useForm<ProfileFormData>({
     resolver: zodResolver(profileFormSchema),
     defaultValues: {
       fullName: "",
-      email: "",
       phoneNumber: "",
     },
   });
@@ -68,9 +67,13 @@ export default function ProfilePage() {
           updatedAt: dbData.updatedAt,
         };
         setUserData(profileData);
+        
+        if (profileData.gender) {
+          setIsGenderLocked(true);
+        }
+
         form.reset({ 
             fullName: profileData.fullName,
-            email: profileData.email,
             phoneNumber: profileData.phoneNumber,
             gender: profileData.gender
         });
@@ -81,9 +84,9 @@ export default function ProfilePage() {
             email: user.email || "غير متوفر",
         };
         setUserData(profileData);
+        setIsGenderLocked(false);
         form.reset({ 
             fullName: profileData.fullName,
-            email: profileData.email,
             phoneNumber: profileData.phoneNumber,
         });
         toast({ title: "ملاحظة", description: "لم يتم العثور على بيانات ملفك الشخصي في قاعدة البيانات. يرجى إكمالها وحفظها.", variant: "default"});
@@ -119,20 +122,16 @@ export default function ProfilePage() {
     try {
       const userRef = ref(dbRider, `users/${currentUserAuth.uid}`);
       
-      const updates: Partial<UserProfileData> & {updatedAt: any} = {
+      const updates: Partial<Omit<UserProfileData, 'email'>> & {updatedAt: any} = {
         fullName: data.fullName,
         phoneNumber: data.phoneNumber,
-        gender: data.gender,
         updatedAt: serverTimestamp()
       };
-      
-      if (data.email && data.email !== currentUserAuth.email) {
-          updates.email = data.email;
-          if (!currentUserAuth.email?.includes('@tawsellah.com')) {
-              await updateEmail(currentUserAuth, data.email);
-          }
-      }
 
+      if (!isGenderLocked) {
+        updates.gender = data.gender;
+      }
+      
       await update(userRef, updates);
 
       const updatedProfileData: UserProfileData = {
@@ -142,6 +141,9 @@ export default function ProfilePage() {
        };
 
       setUserData(updatedProfileData); 
+      if (updatedProfileData.gender) {
+          setIsGenderLocked(true);
+      }
 
       toast({ title: "تم بنجاح", description: "تم تحديث بيانات ملفك الشخصي.", className: "bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-200 border-green-300 dark:border-green-600"});
     } catch (error: any) {
@@ -220,28 +222,6 @@ export default function ProfilePage() {
                 )}
               />
 
-              <FormField
-                  control={form.control}
-                  name="email"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="flex items-center gap-2">
-                        <Mail className="h-5 w-5 text-muted-foreground" />
-                        البريد الإلكتروني
-                      </FormLabel>
-                      <FormControl>
-                        <Input 
-                            type="email" 
-                            {...field} 
-                            disabled={currentUserAuth.providerData.some(p => p.providerId === 'google.com')}
-                            className={currentUserAuth.providerData.some(p => p.providerId === 'google.com') ? "cursor-not-allowed bg-muted/50" : ""}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
                 <FormField
                     control={form.control}
                     name="phoneNumber"
@@ -268,9 +248,9 @@ export default function ProfilePage() {
                             <Users className="h-5 w-5 text-muted-foreground" />
                             الجنس
                         </FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
+                        <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value} disabled={isGenderLocked}>
                             <FormControl>
-                            <SelectTrigger>
+                            <SelectTrigger className={isGenderLocked ? "cursor-not-allowed bg-muted/50" : ""}>
                                 <SelectValue placeholder="اختر الجنس" />
                             </SelectTrigger>
                             </FormControl>
@@ -279,6 +259,7 @@ export default function ProfilePage() {
                             <SelectItem value="female">أنثى</SelectItem>
                             </SelectContent>
                         </Select>
+                        {isGenderLocked && <p className="text-xs text-muted-foreground pt-1">لا يمكن تغيير الجنس بعد تحديده أول مرة.</p>}
                         <FormMessage />
                         </FormItem>
                     )}
@@ -307,3 +288,5 @@ export default function ProfilePage() {
     </>
   );
 }
+
+    
