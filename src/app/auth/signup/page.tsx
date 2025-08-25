@@ -12,10 +12,9 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
 import { authRider, dbRider } from '@/lib/firebase';
-import { createUserWithEmailAndPassword, GoogleAuthProvider, signInWithRedirect, getRedirectResult } from 'firebase/auth';
+import { createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { ref, set, get, query, orderByChild, equalTo } from 'firebase/database';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useEffect, useState } from 'react';
 
 const GoogleIcon = () => (
     <svg className="h-5 w-5" viewBox="0 0 24 24">
@@ -43,7 +42,6 @@ type SignUpFormData = z.infer<typeof signUpSchema>;
 export default function SignUpPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const [isProcessingGoogle, setIsProcessingGoogle] = useState(true);
 
   const form = useForm<SignUpFormData>({
     resolver: zodResolver(signUpSchema),
@@ -56,60 +54,38 @@ export default function SignUpPage() {
     },
   });
   
-  useEffect(() => {
-    const processRedirectResult = async () => {
-        try {
-            const result = await getRedirectResult(authRider);
-            if (result) {
-                const user = result.user;
-                const userRef = ref(dbRider, `users/${user.uid}`);
-                const snapshot = await get(userRef);
-
-                if (!snapshot.exists()) {
-                    await set(userRef, {
-                        uid: user.uid,
-                        fullName: user.displayName || 'مستخدم Google',
-                        email: user.email,
-                        phoneNumber: user.phoneNumber || '',
-                        createdAt: Date.now(),
-                    });
-                    toast({ title: "مرحباً بك!", description: "تم إنشاء حسابك بنجاح باستخدام Google." });
-                } else {
-                    toast({ title: "أهلاً بك مجدداً!", description: "تم تسجيل دخولك بنجاح. هذا الحساب موجود بالفعل." });
-                }
-                router.push('/');
-            }
-        } catch (error: any) {
-            if (error.code !== 'auth/no-user-for-redirect') {
-                toast({
-                    title: "خطأ في التسجيل عبر Google",
-                    description: error.message || "فشل إكمال التسجيل باستخدام Google.",
-                    variant: "destructive",
-                });
-            }
-            console.error("Google sign-up getRedirectResult error:", error);
-        } finally {
-            setIsProcessingGoogle(false);
-        }
-    };
-
-    processRedirectResult();
-}, [router, toast]);
-
-
   const handleGoogleSignUp = async () => {
-    setIsProcessingGoogle(true);
     const provider = new GoogleAuthProvider();
     try {
-      await signInWithRedirect(authRider, provider);
+        const result = await signInWithPopup(authRider, provider);
+        const user = result.user;
+        const userRef = ref(dbRider, `users/${user.uid}`);
+        const snapshot = await get(userRef);
+
+        if (!snapshot.exists()) {
+            await set(userRef, {
+                uid: user.uid,
+                fullName: user.displayName || 'مستخدم Google',
+                email: user.email,
+                phoneNumber: user.phoneNumber || '',
+                createdAt: Date.now(),
+            });
+            toast({ title: "مرحباً بك!", description: "تم إنشاء حسابك بنجاح باستخدام Google." });
+        } else {
+            toast({ title: "أهلاً بك مجدداً!", description: "تم تسجيل دخولك بنجاح. هذا الحساب موجود بالفعل." });
+        }
+        router.push('/');
     } catch (error: any) {
-      console.error("Google sign-up redirect initiation error:", error);
-      toast({
-        title: "خطأ في التسجيل",
-        description: error.message || "فشل بدء التسجيل باستخدام Google.",
-        variant: "destructive",
-      });
-      setIsProcessingGoogle(false);
+        let errorMessage = "فشل إنشاء الحساب باستخدام Google.";
+        if (error.code === 'auth/popup-closed-by-user') {
+            errorMessage = "تم إغلاق نافذة تسجيل الدخول. الرجاء المحاولة مرة أخرى.";
+        }
+        console.error("Google sign-up error:", error);
+        toast({
+            title: "خطأ في التسجيل",
+            description: errorMessage,
+            variant: "destructive",
+        });
     }
   };
 
@@ -193,15 +169,6 @@ export default function SignUpPage() {
       }
     }
   };
-  
-    if (isProcessingGoogle) {
-        return (
-            <div className="flex flex-col justify-center items-center min-h-[200px]">
-                <Loader2 className="h-12 w-12 animate-spin text-primary" />
-                <p className="ms-4 text-lg mt-4">جارِ التحقق من تسجيل الدخول...</p>
-            </div>
-        );
-    }
 
   return (
     <div className="space-y-6">
@@ -368,3 +335,5 @@ export default function SignUpPage() {
     </div>
   );
 }
+
+    
