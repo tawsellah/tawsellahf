@@ -12,8 +12,9 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
 import { authRider, dbRider } from '@/lib/firebase';
-import { signInWithEmailAndPassword, sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup, type User } from 'firebase/auth';
+import { signInWithEmailAndPassword, sendPasswordResetEmail, GoogleAuthProvider, signInWithRedirect, getRedirectResult, type User } from 'firebase/auth';
 import { ref, query, orderByChild, equalTo, get, set } from 'firebase/database';
+import { useEffect } from 'react';
 
 const GoogleIcon = () => (
     <svg className="h-5 w-5" viewBox="0 0 24 24">
@@ -42,6 +43,44 @@ export default function SignInPage() {
       password: "",
     },
   });
+
+  useEffect(() => {
+    const handleRedirectResult = async () => {
+      try {
+        const result = await getRedirectResult(authRider);
+        if (result && result.user) {
+          const user = result.user;
+          const userRef = ref(dbRider, `users/${user.uid}`);
+          const snapshot = await get(userRef);
+
+          if (!snapshot.exists()) {
+            await set(userRef, {
+              uid: user.uid,
+              fullName: user.displayName || 'مستخدم Google',
+              email: user.email,
+              phoneNumber: user.phoneNumber || '',
+              createdAt: Date.now(),
+            });
+            toast({ title: "مرحباً بك!", description: "تم إنشاء حسابك بنجاح باستخدام Google." });
+          } else {
+            toast({ title: "أهلاً بك مجدداً!", description: "تم تسجيل دخولك بنجاح باستخدام Google." });
+          }
+          router.push('/');
+        }
+      } catch (error: any) {
+        console.error("Google sign-in redirect result error:", error);
+        if (error.code !== 'auth/web-storage-unsupported') {
+            toast({
+            title: "خطأ في تسجيل الدخول",
+            description: error.message || "فشل تسجيل الدخول باستخدام Google. الرجاء المحاولة مرة أخرى.",
+            variant: "destructive",
+            });
+        }
+      }
+    };
+    handleRedirectResult();
+  }, [router, toast]);
+
 
   const handlePasswordReset = async () => {
     const phoneNumber = form.getValues("phoneNumber");
@@ -89,41 +128,15 @@ export default function SignInPage() {
     }
   };
   
-    const handleGoogleSignIn = async () => {
+  const handleGoogleSignIn = async () => {
     const provider = new GoogleAuthProvider();
     try {
-      const result = await signInWithPopup(authRider, provider);
-      const user = result.user;
-
-      const userRef = ref(dbRider, `users/${user.uid}`);
-      const snapshot = await get(userRef);
-
-      if (!snapshot.exists()) {
-        await set(userRef, {
-            uid: user.uid,
-            fullName: user.displayName || 'مستخدم Google',
-            email: user.email,
-            phoneNumber: user.phoneNumber || '',
-            createdAt: Date.now(),
-        });
-        toast({
-            title: "مرحباً بك!",
-            description: "تم إنشاء حسابك بنجاح باستخدام Google.",
-        });
-      } else {
-         toast({
-            title: "أهلاً بك مجدداً!",
-            description: "تم تسجيل دخولك بنجاح باستخدام Google.",
-        });
-      }
-
-      router.push('/');
-
+      await signInWithRedirect(authRider, provider);
     } catch (error: any) {
-      console.error("Google sign-in error:", error);
+      console.error("Google sign-in redirect initiation error:", error);
       toast({
-        title: "خطأ في تسجيل الدخول",
-        description: error.message || "فشل تسجيل الدخول باستخدام Google. الرجاء المحاولة مرة أخرى.",
+        title: "خطأ في بدء تسجيل الدخول",
+        description: error.message || "فشل بدء عملية تسجيل الدخول باستخدام Google.",
         variant: "destructive",
       });
     }
@@ -266,3 +279,5 @@ export default function SignInPage() {
     </div>
   );
 }
+
+    
