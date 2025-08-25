@@ -21,7 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 interface UserProfileData {
   fullName: string;
   phoneNumber: string;
-  email: string; // Keep for internal logic, but hide from UI
+  email: string; // Keep for internal logic
   gender?: 'male' | 'female';
   createdAt?: number;
   updatedAt?: number;
@@ -30,7 +30,7 @@ interface UserProfileData {
 const profileFormSchema = z.object({
   fullName: z.string().min(3, "يجب أن يكون الاسم الكامل 3 أحرف على الأقل"),
   phoneNumber: z.string().regex(/^(07[789])\d{7}$/, "يجب أن يكون رقم الهاتف أردني صالح مكون من 10 أرقام ويبدأ بـ 077, 078, أو 079").optional().or(z.literal('')),
-  gender: z.enum(["male", "female"], { required_error: "الرجاء تحديد الجنس" }),
+  gender: z.enum(["male", "female"], { required_error: "الرجاء تحديد الجنس" }).optional(),
 });
 
 type ProfileFormData = z.infer<typeof profileFormSchema>;
@@ -119,6 +119,13 @@ export default function ProfilePage() {
   const onSubmit = async (data: ProfileFormData) => {
     if (!currentUserAuth || !userData) return;
     setIsSaving(true);
+
+    if (!isGenderLocked && !data.gender) {
+        form.setError("gender", { message: "الرجاء تحديد الجنس قبل الحفظ." });
+        setIsSaving(false);
+        return;
+    }
+
     try {
       const userRef = ref(dbRider, `users/${currentUserAuth.uid}`);
       
@@ -128,7 +135,7 @@ export default function ProfilePage() {
         updatedAt: serverTimestamp()
       };
 
-      if (!isGenderLocked) {
+      if (!isGenderLocked && data.gender) {
         updates.gender = data.gender;
       }
       
@@ -239,31 +246,32 @@ export default function ProfilePage() {
                     )}
                 />
 
-                <FormField
-                    control={form.control}
-                    name="gender"
-                    render={({ field }) => (
-                        <FormItem>
-                        <FormLabel className="flex items-center gap-2">
-                            <Users className="h-5 w-5 text-muted-foreground" />
-                            الجنس
-                        </FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value} disabled={isGenderLocked}>
-                            <FormControl>
-                            <SelectTrigger className={isGenderLocked ? "cursor-not-allowed bg-muted/50" : ""}>
-                                <SelectValue placeholder="اختر الجنس" />
-                            </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                            <SelectItem value="male">ذكر</SelectItem>
-                            <SelectItem value="female">أنثى</SelectItem>
-                            </SelectContent>
-                        </Select>
-                        {isGenderLocked && <p className="text-xs text-muted-foreground pt-1">لا يمكن تغيير الجنس بعد تحديده أول مرة.</p>}
-                        <FormMessage />
-                        </FormItem>
-                    )}
-                />
+                {!isGenderLocked && (
+                    <FormField
+                        control={form.control}
+                        name="gender"
+                        render={({ field }) => (
+                            <FormItem>
+                            <FormLabel className="flex items-center gap-2">
+                                <Users className="h-5 w-5 text-muted-foreground" />
+                                الجنس
+                            </FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
+                                <FormControl>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="اختر الجنس" />
+                                </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                <SelectItem value="male">ذكر</SelectItem>
+                                <SelectItem value="female">أنثى</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+                )}
 
               <Button type="submit" className="w-full p-3 text-base" disabled={isSaving || isLoading}>
                 {isSaving ? <Loader2 className="ms-2 h-5 w-5 animate-spin" /> : <Save className="ms-2 h-5 w-5" />}
@@ -288,5 +296,3 @@ export default function ProfilePage() {
     </>
   );
 }
-
-    
