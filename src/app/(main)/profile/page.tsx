@@ -7,7 +7,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { authRider, dbRider } from '@/lib/firebase';
-import { onAuthStateChanged, signOut, type User as FirebaseUserAuth, updateEmail } from 'firebase/auth';
+import { onAuthStateChanged, signOut, type User as FirebaseUserAuth } from 'firebase/auth';
 import { ref, get, update, serverTimestamp } from 'firebase/database';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,7 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 interface UserProfileData {
   fullName: string;
   phoneNumber: string;
-  email: string; // Keep for internal logic
+  email: string;
   gender?: 'male' | 'female';
   createdAt?: number;
   updatedAt?: number;
@@ -29,7 +29,6 @@ interface UserProfileData {
 
 const profileFormSchema = z.object({
   fullName: z.string().min(3, "يجب أن يكون الاسم الكامل 3 أحرف على الأقل"),
-  phoneNumber: z.string().regex(/^(07[789])\d{7}$/, "يجب أن يكون رقم الهاتف أردني صالح مكون من 10 أرقام ويبدأ بـ 077, 078, أو 079").optional().or(z.literal('')),
   gender: z.enum(["male", "female"], { required_error: "الرجاء تحديد الجنس" }).optional(),
 });
 
@@ -48,7 +47,6 @@ export default function ProfilePage() {
     resolver: zodResolver(profileFormSchema),
     defaultValues: {
       fullName: "",
-      phoneNumber: "",
     },
   });
 
@@ -74,7 +72,6 @@ export default function ProfilePage() {
 
         form.reset({ 
             fullName: profileData.fullName,
-            phoneNumber: profileData.phoneNumber,
             gender: profileData.gender
         });
       } else {
@@ -87,7 +84,6 @@ export default function ProfilePage() {
         setIsGenderLocked(false);
         form.reset({ 
             fullName: profileData.fullName,
-            phoneNumber: profileData.phoneNumber,
         });
         toast({ title: "ملاحظة", description: "لم يتم العثور على بيانات ملفك الشخصي في قاعدة البيانات. يرجى إكمالها وحفظها.", variant: "default"});
       }
@@ -129,9 +125,8 @@ export default function ProfilePage() {
     try {
       const userRef = ref(dbRider, `users/${currentUserAuth.uid}`);
       
-      const updates: Partial<Omit<UserProfileData, 'email'>> & {updatedAt: any} = {
+      const updates: Partial<Omit<UserProfileData, 'email' | 'phoneNumber'>> & {updatedAt: any} = {
         fullName: data.fullName,
-        phoneNumber: data.phoneNumber,
         updatedAt: serverTimestamp()
       };
 
@@ -184,7 +179,7 @@ export default function ProfilePage() {
     );
   }
 
-  if (!currentUserAuth) {
+  if (!currentUserAuth || !userData) {
     return (
       <PageWrapper>
         <div className="text-center py-10">
@@ -210,75 +205,71 @@ export default function ProfilePage() {
           <CardDescription>عرض وتعديل معلومات حسابك.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <FormField
-                control={form.control}
-                name="fullName"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="flex items-center gap-2">
-                      <User className="h-5 w-5 text-muted-foreground" />
-                      الاسم الكامل
-                    </FormLabel>
-                    <FormControl>
-                      <Input placeholder="مثال: أحمد محمد" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+            <div className="space-y-4">
+                <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                    <Mail className="h-5 w-5 text-muted-foreground" />
+                    <span className="text-sm font-medium text-foreground">{userData.email}</span>
+                </div>
+                <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                    <Phone className="h-5 w-5 text-muted-foreground" />
+                    <span className="text-sm font-medium text-foreground">{userData.phoneNumber}</span>
+                </div>
+            </div>
 
-                <FormField
+            <div className="border-t pt-6">
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                  <FormField
                     control={form.control}
-                    name="phoneNumber"
+                    name="fullName"
                     render={({ field }) => (
-                    <FormItem>
+                      <FormItem>
                         <FormLabel className="flex items-center gap-2">
-                        <Phone className="h-5 w-5 text-muted-foreground" />
-                        رقم الهاتف
+                          <User className="h-5 w-5 text-muted-foreground" />
+                          الاسم الكامل
                         </FormLabel>
                         <FormControl>
-                        <Input type="tel" placeholder="مثال: 07XXXXXXXX" {...field} />
+                          <Input placeholder="مثال: أحمد محمد" {...field} />
                         </FormControl>
                         <FormMessage />
-                    </FormItem>
+                      </FormItem>
                     )}
-                />
+                  />
+                    
+                    {!isGenderLocked && (
+                        <FormField
+                            control={form.control}
+                            name="gender"
+                            render={({ field }) => (
+                                <FormItem>
+                                <FormLabel className="flex items-center gap-2">
+                                    <Users className="h-5 w-5 text-muted-foreground" />
+                                    الجنس
+                                </FormLabel>
+                                <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
+                                    <FormControl>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="اختر الجنس" />
+                                    </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                    <SelectItem value="male">ذكر</SelectItem>
+                                    <SelectItem value="female">أنثى</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                    )}
 
-                {!isGenderLocked && (
-                    <FormField
-                        control={form.control}
-                        name="gender"
-                        render={({ field }) => (
-                            <FormItem>
-                            <FormLabel className="flex items-center gap-2">
-                                <Users className="h-5 w-5 text-muted-foreground" />
-                                الجنس
-                            </FormLabel>
-                            <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
-                                <FormControl>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="اختر الجنس" />
-                                </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                <SelectItem value="male">ذكر</SelectItem>
-                                <SelectItem value="female">أنثى</SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <FormMessage />
-                            </FormItem>
-                        )}
-                    />
-                )}
-
-              <Button type="submit" className="w-full p-3 text-base" disabled={isSaving || isLoading}>
-                {isSaving ? <Loader2 className="ms-2 h-5 w-5 animate-spin" /> : <Save className="ms-2 h-5 w-5" />}
-                {isSaving ? "جارِ الحفظ..." : "حفظ التغييرات"}
-              </Button>
-            </form>
-          </Form>
+                  <Button type="submit" className="w-full p-3 text-base" disabled={isSaving || isLoading}>
+                    {isSaving ? <Loader2 className="ms-2 h-5 w-5 animate-spin" /> : <Save className="ms-2 h-5 w-5" />}
+                    {isSaving ? "جارِ الحفظ..." : "حفظ التغييرات"}
+                  </Button>
+                </form>
+              </Form>
+            </div>
         </CardContent>
         <CardFooter className="flex flex-col gap-4 pt-6 border-t">
           <Button
