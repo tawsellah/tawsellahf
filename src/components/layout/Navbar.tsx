@@ -19,11 +19,6 @@ interface UserDisplayData {
   phoneNumber: string;
 }
 
-const defaultNavLinks = [
-  { href: '/auth/signin', label: 'تسجيل الدخول', icon: LogIn, id: 'signin' },
-  { href: '/auth/signup', label: 'إنشاء حساب جديد', icon: UserPlus, id: 'signup' },
-];
-
 export function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
@@ -69,32 +64,6 @@ export function Navbar() {
     });
     return () => unsubscribe();
   }, []);
-
-  
-  const NavLinkItem = ({ href, label, icon: Icon, isMobile, id, onClickOverride }: {href: string, label: string, icon: React.ElementType, isMobile?: boolean, id: string, onClickOverride?: () => void}) => (
-    <Link href={href} passHref legacyBehavior>
-      <a
-        onClick={(e) => {
-          if (onClickOverride) {
-            e.preventDefault(); // Prevent Link default navigation if onClickOverride exists
-            onClickOverride();
-          }
-          if (isMobile && isMobileMenuOpen) setIsMobileMenuOpen(false);
-        }}
-        className={cn(
-          "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors duration-300 ease-in-out w-full md:w-auto justify-start md:justify-center",
-          pathname === href && !onClickOverride 
-            ? "bg-primary text-primary-foreground"
-            : "text-foreground hover:bg-accent hover:text-accent-foreground",
-          "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-        )}
-        aria-current={pathname === href && !onClickOverride ? "page" : undefined}
-      >
-        <Icon className="h-5 w-5" />
-        <span>{label}</span>
-      </a>
-    </Link>
-  );
 
   const renderNavItems = (isMobile = false) => {
     if (isLoadingAuth) {
@@ -167,10 +136,8 @@ export function Navbar() {
         );
       }
     } else {
-      // Logged-out state
-      return defaultNavLinks.map((link) => (
-        <NavLinkItem key={link.id} {...link} isMobile={isMobile} id={link.id} />
-      ));
+      // Logged-out state - render nothing as requested
+      return null;
     }
   };
 

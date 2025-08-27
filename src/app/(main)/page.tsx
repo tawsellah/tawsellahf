@@ -1,7 +1,7 @@
 
 "use client";
 
-import { Search, MapPin, Flag, Clock, Loader2, ListTodo, ArrowUpDown } from 'lucide-react';
+import { Search, MapPin, Flag, Clock, Loader2, ListTodo, ArrowUpDown, LogIn, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input as ShadInput } from '@/components/ui/input'; // Renamed to avoid conflict
@@ -11,13 +11,15 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import type { Trip, FirebaseTrip, FirebaseUser } from '@/types';
 import { TripCard } from '@/components/trip/TripCard';
-import { useState, useMemo } from 'react';
-import { dbPrimary } from '@/lib/firebase'; 
+import { useState, useMemo, useEffect } from 'react';
+import { dbPrimary, authRider } from '@/lib/firebase'; 
+import { onAuthStateChanged, type User as FirebaseUserAuth } from 'firebase/auth';
 import { ref, get } from 'firebase/database';
 import { jordanianGovernorates as governorateDataForConstants } from '@/lib/constants'; // Keep for getGovernorateDisplayNameAr
 import { formatTimeToArabicAMPM, formatDateToArabic, generateSeatsFromTripData, getGovernorateDisplayNameAr } from '@/lib/constants';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import Link from 'next/link';
 
 const searchSchema = z.object({
   startPoint: z.string().min(1, "نقطة الانطلاق مطلوبة"),
@@ -33,6 +35,9 @@ export default function TripSearchPage() {
   const [isSearching, setIsSearching] = useState(false);
   const [sortOption, setSortOption] = useState<SortOption>('time-asc');
   const { toast } = useToast();
+  const [currentUserAuth, setCurrentUserAuth] = useState<FirebaseUserAuth | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+
   const form = useForm<SearchFormData>({
     resolver: zodResolver(searchSchema),
     defaultValues: {
@@ -41,6 +46,14 @@ export default function TripSearchPage() {
       departureTime: "",
     },
   });
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(authRider, (user) => {
+      setCurrentUserAuth(user);
+      setIsAuthLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
 
   const sortedSearchResults = useMemo(() => {
     if (unfilteredResults.length === 0) return [];
@@ -296,6 +309,30 @@ export default function TripSearchPage() {
           </Button>
         </form>
       </Form>
+      
+      {!isAuthLoading && !currentUserAuth && (
+        <div className="mt-8 pt-6 border-t space-y-4">
+          <h3 className="text-center text-lg font-semibold text-foreground">انضم إلينا الآن!</h3>
+          <p className="text-center text-sm text-muted-foreground">
+            سجل دخولك أو أنشئ حسابًا جديدًا لحجز رحلتك القادمة.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4">
+             <Button asChild className="w-full p-3 rounded-lg text-base font-semibold transition-all duration-300 ease-in-out hover:shadow-md active:scale-95">
+                <Link href="/auth/signin">
+                  <LogIn className="ms-2 h-5 w-5" />
+                  تسجيل الدخول
+                </Link>
+             </Button>
+             <Button asChild variant="outline" className="w-full p-3 rounded-lg text-base font-semibold transition-all duration-300 ease-in-out hover:shadow-md active:scale-95">
+                <Link href="/auth/signup">
+                  <UserPlus className="ms-2 h-5 w-5" />
+                  إنشاء حساب جديد
+                </Link>
+             </Button>
+          </div>
+        </div>
+      )}
+
 
       {unfilteredResults.length > 0 && (
         <div className="space-y-4 pt-6">
