@@ -259,6 +259,7 @@ export default function SignUpPage() {
                   <Checkbox
                     checked={field.value}
                     onCheckedChange={field.onChange}
+                    id="terms"
                   />
                 </FormControl>
                 <div className="space-y-1 leading-none">
