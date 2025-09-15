@@ -285,17 +285,19 @@ export default function SignUpPage() {
           <div className="flex flex-col sm:flex-row gap-4 pt-2">
             <Button 
               type="submit" 
-              className="flex-1 p-3 rounded-lg text-base font-semibold transition-all duration-300 ease-in-out hover:bg-primary/90 hover:shadow-md active:scale-95"
+              className="w-full p-3 rounded-lg text-base font-semibold transition-all duration-300 ease-in-out hover:bg-primary/90 hover:shadow-md active:scale-95"
               disabled={form.formState.isSubmitting}
             >
               {form.formState.isSubmitting ? <Loader2 className="ms-2 h-5 w-5 animate-spin" /> : <Check className="ms-2 h-5 w-5" />}
               {form.formState.isSubmitting ? "جارِ التسجيل..." : "تسجيل"}
             </Button>
-            <Button 
+          </div>
+          <div className="flex flex-col sm:flex-row gap-4">
+             <Button 
               type="button" 
               variant="outline" 
               onClick={() => router.push('/auth/signin')}
-              className="flex-1 p-3 rounded-lg text-base font-semibold transition-all duration-300 ease-in-out hover:shadow-md active:scale-95"
+              className="w-full p-3 rounded-lg text-base font-semibold transition-all duration-300 ease-in-out hover:shadow-md active:scale-95"
               disabled={form.formState.isSubmitting}
             >
               <ArrowLeft className="ms-2 h-5 w-5" /> 
