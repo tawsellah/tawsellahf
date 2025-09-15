@@ -15,7 +15,7 @@ import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
 import { authRider, dbRider } from '@/lib/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { ref, set, get, query, orderByChild, equalTo } from 'firebase/database';
+import { ref, set, get } from 'firebase/database';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const signUpSchema = z.object({
@@ -54,79 +54,88 @@ export default function SignUpPage() {
   const onSubmit = async (data: SignUpFormData) => {
     form.clearErrors();
     
-    const usersRef = ref(dbRider, 'users');
-    const phoneQuery = query(usersRef, orderByChild('phoneNumber'), equalTo(data.phoneNumber));
-    const phoneSnapshot = await get(phoneQuery);
-
-    if (phoneSnapshot.exists()) {
-        form.setError("phoneNumber", { message: "رقم الهاتف هذا مسجل بالفعل." });
-        toast({
-            title: "خطأ في التسجيل",
-            description: "رقم الهاتف هذا مسجل بالفعل.",
-            variant: "destructive",
-        });
-        return;
-    }
-
-    const emailForAuth = data.email || `t${data.phoneNumber}@tawsellah.com`;
-
     try {
-      const userCredential = await createUserWithEmailAndPassword(authRider, emailForAuth, data.password);
-      const user = userCredential.user;
+        const usersRef = ref(dbRider, 'users');
+        const snapshot = await get(usersRef);
+        let phoneExists = false;
+        if (snapshot.exists()) {
+            const usersData = snapshot.val();
+            for (const userId in usersData) {
+                if (usersData[userId].phoneNumber === data.phoneNumber) {
+                    phoneExists = true;
+                    break;
+                }
+            }
+        }
 
-      await set(ref(dbRider, 'users/' + user.uid), {
-        uid: user.uid,
-        fullName: data.fullName,
-        phoneNumber: data.phoneNumber,
-        email: emailForAuth,
-        gender: data.gender,
-        createdAt: Date.now(),
-      });
+        if (phoneExists) {
+            form.setError("phoneNumber", { message: "رقم الهاتف هذا مسجل بالفعل." });
+            toast({
+                title: "خطأ في التسجيل",
+                description: "رقم الهاتف هذا مسجل بالفعل.",
+                variant: "destructive",
+            });
+            return;
+        }
 
-      toast({
-        title: "تم إنشاء الحساب بنجاح!",
-        description: `أهلاً بك ${data.fullName}. يمكنك الآن تسجيل الدخول.`,
-        className: "bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-200 border-green-300 dark:border-green-600"
-      });
-      router.push('/auth/signin');
+        const emailForAuth = data.email || `t${data.phoneNumber}@tawsellah.com`;
+        
+        const userCredential = await createUserWithEmailAndPassword(authRider, emailForAuth, data.password);
+        const user = userCredential.user;
+
+        await set(ref(dbRider, 'users/' + user.uid), {
+            uid: user.uid,
+            fullName: data.fullName,
+            phoneNumber: data.phoneNumber,
+            email: emailForAuth,
+            gender: data.gender,
+            createdAt: Date.now(),
+        });
+
+        toast({
+            title: "تم إنشاء الحساب بنجاح!",
+            description: `أهلاً بك ${data.fullName}. يمكنك الآن تسجيل الدخول.`,
+            className: "bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-200 border-green-300 dark:border-green-600"
+        });
+        router.push('/auth/signin');
 
     } catch (error) {
-      console.error("Error signing up:", error);
-      let errorMessage = "حدث خطأ أثناء إنشاء الحساب. الرجاء المحاولة مرة أخرى.";
-      let hasSetFieldSpecificError = false;
+        console.error("Error signing up:", error);
+        let errorMessage = "حدث خطأ أثناء إنشاء الحساب. الرجاء المحاولة مرة أخرى.";
+        let hasSetFieldSpecificError = false;
 
-      if (error && typeof error === 'object' && 'code' in error) {
-        const firebaseError = error as { code: string; message: string };
-        switch (firebaseError.code) {
-          case 'auth/email-already-in-use':
-            errorMessage = "هذا البريد الإلكتروني أو رقم الهاتف مستخدم بالفعل.";
-            form.setError("phoneNumber", { message: "رقم الهاتف أو البريد الإلكتروني مرتبط بحساب آخر" });
-            hasSetFieldSpecificError = true;
-            break;
-          case 'auth/weak-password':
-            errorMessage = "كلمة المرور ضعيفة جداً. يجب أن تكون 6 أحرف على الأقل.";
-            form.setError("password", { message: errorMessage });
-            hasSetFieldSpecificError = true;
-            break;
-          case 'auth/invalid-email':
-            errorMessage = "صيغة البريد الإلكتروني غير صالحة.";
-            form.setError("email", { message: errorMessage });
-            hasSetFieldSpecificError = true;
-            break;
-          default:
-            errorMessage = `فشل إنشاء الحساب: ${firebaseError.message || 'خطأ غير معروف'}`;
+        if (error && typeof error === 'object' && 'code' in error) {
+            const firebaseError = error as { code: string; message: string };
+            switch (firebaseError.code) {
+                case 'auth/email-already-in-use':
+                    errorMessage = "هذا البريد الإلكتروني أو رقم الهاتف مستخدم بالفعل.";
+                    form.setError("phoneNumber", { message: "رقم الهاتف أو البريد الإلكتروني مرتبط بحساب آخر" });
+                    hasSetFieldSpecificError = true;
+                    break;
+                case 'auth/weak-password':
+                    errorMessage = "كلمة المرور ضعيفة جداً. يجب أن تكون 6 أحرف على الأقل.";
+                    form.setError("password", { message: errorMessage });
+                    hasSetFieldSpecificError = true;
+                    break;
+                case 'auth/invalid-email':
+                    errorMessage = "صيغة البريد الإلكتروني غير صالحة.";
+                    form.setError("email", { message: errorMessage });
+                    hasSetFieldSpecificError = true;
+                    break;
+                default:
+                    errorMessage = `فشل إنشاء الحساب: ${firebaseError.message || 'خطأ غير معروف'}`;
+            }
         }
-      }
 
-      toast({
-        title: "خطأ في إنشاء الحساب",
-        description: errorMessage,
-        variant: "destructive",
-      });
-      
-      if (!hasSetFieldSpecificError) {
-         form.setError("root", { message: errorMessage });
-      }
+        toast({
+            title: "خطأ في إنشاء الحساب",
+            description: errorMessage,
+            variant: "destructive",
+        });
+        
+        if (!hasSetFieldSpecificError) {
+            form.setError("root", { message: errorMessage });
+        }
     }
   };
 
@@ -282,30 +291,28 @@ export default function SignUpPage() {
              <p className="text-sm font-medium text-destructive text-center">{form.formState.errors.root.message}</p>
           )}
 
-          <div className="flex flex-col sm:flex-row gap-4 pt-2">
-            <Button 
-              type="submit" 
-              className="w-full p-3 rounded-lg text-base font-semibold transition-all duration-300 ease-in-out hover:bg-primary/90 hover:shadow-md active:scale-95"
-              disabled={form.formState.isSubmitting}
-            >
-              {form.formState.isSubmitting ? <Loader2 className="ms-2 h-5 w-5 animate-spin" /> : <Check className="ms-2 h-5 w-5" />}
-              {form.formState.isSubmitting ? "جارِ التسجيل..." : "تسجيل"}
-            </Button>
-          </div>
-          <div className="flex flex-col sm:flex-row gap-4">
-             <Button 
-              type="button" 
-              variant="outline" 
-              onClick={() => router.push('/auth/signin')}
-              className="w-full p-3 rounded-lg text-base font-semibold transition-all duration-300 ease-in-out hover:shadow-md active:scale-95"
-              disabled={form.formState.isSubmitting}
-            >
-              <ArrowLeft className="ms-2 h-5 w-5" /> 
-              رجوع
-            </Button>
-          </div>
+          <Button 
+            type="submit" 
+            className="w-full p-3 rounded-lg text-base font-semibold transition-all duration-300 ease-in-out hover:bg-primary/90 hover:shadow-md active:scale-95"
+            disabled={form.formState.isSubmitting}
+          >
+            {form.formState.isSubmitting ? <Loader2 className="ms-2 h-5 w-5 animate-spin" /> : <Check className="ms-2 h-5 w-5" />}
+            {form.formState.isSubmitting ? "جارِ التسجيل..." : "تسجيل"}
+          </Button>
+          <Button 
+            type="button" 
+            variant="outline" 
+            onClick={() => router.push('/auth/signin')}
+            className="w-full p-3 rounded-lg text-base font-semibold transition-all duration-300 ease-in-out hover:shadow-md active:scale-95"
+            disabled={form.formState.isSubmitting}
+          >
+            <ArrowLeft className="ms-2 h-5 w-5" /> 
+            رجوع
+          </Button>
         </form>
       </Form>
     </div>
   );
 }
+
+    

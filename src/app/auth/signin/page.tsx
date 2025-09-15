@@ -3,7 +3,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { LogIn, Phone, Lock, Loader2, Mail } from 'lucide-react';
+import { LogIn, Phone, Lock, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -13,7 +13,7 @@ import * as z from 'zod';
 import { useToast } from '@/hooks/use-toast';
 import { authRider, dbRider } from '@/lib/firebase';
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
-import { ref, query, orderByChild, equalTo, get } from 'firebase/database';
+import { ref, get } from 'firebase/database';
 
 const signInSchema = z.object({
   phoneNumber: z.string().regex(/^(07[789])\d{7}$/, "يجب أن يكون رقم الهاتف أردني صالح مكون من 10 أرقام ويبدأ بـ 077, 078, أو 079"),
@@ -49,26 +49,28 @@ export default function SignInPage() {
 
     try {
       const usersRef = ref(dbRider, 'users');
-      const userQuery = query(usersRef, orderByChild('phoneNumber'), equalTo(phoneNumber));
-      const snapshot = await get(userQuery);
+      const snapshot = await get(usersRef);
 
+      let userEmail: string | null = null;
       if (snapshot.exists()) {
         const usersData = snapshot.val();
-        const userId = Object.keys(usersData)[0];
-        const userEmail = usersData[userId].email;
-
-        if (userEmail) {
-          await sendPasswordResetEmail(authRider, userEmail);
-          toast({
-            title: "تم إرسال رابط إعادة التعيين",
-            description: `تم إرسال بريد إلكتروني إلى البريد المرتبط برقمك مع تعليمات لإعادة تعيين كلمة المرور.`,
-            variant: "default",
-          });
-        } else {
-           toast({ title: "خطأ", description: "لم يتم العثور على بريد إلكتروني مرتبط بهذا الحساب.", variant: "destructive" });
+        for (const userId in usersData) {
+          if (usersData[userId].phoneNumber === phoneNumber) {
+            userEmail = usersData[userId].email;
+            break;
+          }
         }
+      }
+
+      if (userEmail) {
+        await sendPasswordResetEmail(authRider, userEmail);
+        toast({
+          title: "تم إرسال رابط إعادة التعيين",
+          description: `تم إرسال بريد إلكتروني إلى البريد المرتبط برقمك مع تعليمات لإعادة تعيين كلمة المرور.`,
+          variant: "default",
+        });
       } else {
-        toast({ title: "خطأ", description: "لم يتم العثور على حساب مرتبط برقم الهاتف هذا.", variant: "destructive" });
+         toast({ title: "خطأ", description: "لم يتم العثور على حساب مرتبط برقم الهاتف هذا.", variant: "destructive" });
       }
     } catch (error: any) {
       console.error("Password reset error:", error);
@@ -200,3 +202,5 @@ export default function SignInPage() {
     </div>
   );
 }
+
+    
